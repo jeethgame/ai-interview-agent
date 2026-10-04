@@ -483,7 +483,7 @@ export async function loginUser(data: LoginRequest): Promise<AuthResponse> {
 }
 
 export async function logoutUser(): Promise<{ message: string }> {
-  const token = localStorage.getItem('ai_interviewer_access_token');
+  const token = localStorage.getItem('aia_access_token');
   
   const response = await fetch(`${API_BASE_URL}/auth/logout`, {
     method: 'POST',
@@ -497,7 +497,7 @@ export async function logoutUser(): Promise<{ message: string }> {
 }
 
 export async function getUserProfile(): Promise<any> {
-  const token = localStorage.getItem('ai_interviewer_access_token');
+  const token = localStorage.getItem('aia_access_token');
   
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     method: 'GET',
@@ -512,7 +512,7 @@ export async function getUserProfile(): Promise<any> {
 
 // Utility function to add auth headers to API requests
 function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('ai_interviewer_access_token');
+  const token = localStorage.getItem('aia_access_token');
   
   return {
     'Content-Type': 'application/json',
@@ -736,3 +736,39 @@ export const api = {
     return response.blob();
   },
 };
+
+// ── Candidate Assignments ─────────────────────────────────────────────────
+
+export interface MyInterviewAssignment {
+  id: string;
+  status: string;
+  session_id: string | null;
+  title: string;
+  target_role: string;
+  company: string | null;
+  scheduled_at: string | null;
+  duration_minutes: number;
+  interview_style: string;
+  difficulty: string;
+}
+
+export interface MyExamAssignment {
+  id: string;
+  status: string;
+  exam_id: string;
+  deadline: string | null;
+  title: string;
+  duration_minutes: number | null;
+}
+
+export interface MyAssignmentsResponse {
+  interviews: MyInterviewAssignment[];
+  exams: MyExamAssignment[];
+}
+
+export async function getMyAssignments(): Promise<MyAssignmentsResponse> {
+  const response = await fetch(`${API_BASE_URL}/me/assignments`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
+}

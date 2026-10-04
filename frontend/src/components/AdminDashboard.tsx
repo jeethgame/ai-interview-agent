@@ -10,9 +10,14 @@ import { Button } from '@/components/ui/button';
 
 const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8001';
 
-async function apiFetch(path: string, token?: string) {
+async function apiFetch(path: string, token?: string, opts: RequestInit = {}) {
   const r = await fetch(`${API}${path}`, {
-    headers: { Authorization: token ? `Bearer ${token}` : '' },
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {}),
+    },
   });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
@@ -92,6 +97,9 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
   const [drives, setDrives] = useState<DriveRow[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'candidates' | 'drives'>('overview');
   const [loading, setLoading] = useState(true);
+  const [showCreateDrive, setShowCreateDrive] = useState(false);
+  const [allocatingDriveId, setAllocatingDriveId] = useState<string | null>(null);
+  const [allocCandidates, setAllocCandidates] = useState<string[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -240,6 +248,9 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-bold text-gray-800">Placement Drives</h2>
+            <Button size="sm" onClick={() => setShowCreateDrive(true)} className="gap-1.5 bg-[#DC2626] hover:bg-[#B91C1C]">
+              <Plus size={14} /> Create Drive
+            </Button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -250,11 +261,12 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-right">Allocated</th>
                 <th className="px-4 py-3 text-right">Completed</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {drives.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">No drives yet</td></tr>
+                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400">No drives yet</td></tr>
               ) : drives.map(d => (
                 <tr key={d.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-3 font-medium text-gray-800">{d.title}</td>
@@ -269,10 +281,104 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">{d.allocated_count}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-800">{d.completed_count}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => { setAllocatingDriveId(d.id); setAllocCandidates([]); }}
+                      className="text-xs font-semibold text-[#DC2626] hover:underline">Allocate</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Create Drive Modal ──────────────────────────────────────────── */}
+      {showCreateDrive && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowCreateDrive(false)}>
+          <form onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 shadow-xl"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              try {
+                await apiFetch(`/orgs/${orgId}/drives`, token, {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    title: fd.get('title'), target_role: fd.get('target_role'),
+                    company: fd.get('company') || null, interview_style: fd.get('interview_style'),
+                    difficulty: fd.get('difficulty'), duration_minutes: Number(fd.get('duration_minutes') || 30),
+                  }),
+                });
+                setShowCreateDrive(false);
+                load();
+              } catch (err) { console.error('Create drive failed', err); }
+            }}>
+            <h3 className="text-lg font-black text-gray-900">Create Placement Drive</h3>
+            <input name="title" required placeholder="Drive title" className="w-full px-3 py-2 border rounded-xl text-sm" />
+            <input name="target_role" required placeholder="Target role (e.g. Software Engineer)" className="w-full px-3 py-2 border rounded-xl text-sm" />
+            <input name="company" placeholder="Company (optional)" className="w-full px-3 py-2 border rounded-xl text-sm" />
+            <div className="grid grid-cols-3 gap-2">
+              <select name="interview_style" className="px-3 py-2 border rounded-xl text-sm">
+                <option value="formal">Formal</option>
+                <option value="technical">Technical</option>
+                <option value="casual">Casual</option>
+              </select>
+              <select name="difficulty" className="px-3 py-2 border rounded-xl text-sm">
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+              <input name="duration_minutes" type="number" defaultValue={30} min={5} max={120} className="px-3 py-2 border rounded-xl text-sm" />
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowCreateDrive(false)}>Cancel</Button>
+              <Button type="submit" size="sm" className="bg-[#DC2626] hover:bg-[#B91C1C]">Create</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Allocate Candidates Modal ───────────────────────────────────── */}
+      {allocatingDriveId && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setAllocatingDriveId(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 shadow-xl max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-black text-gray-900">Allocate Candidates</h3>
+            <p className="text-xs text-gray-500">Select candidates to assign to this drive.</p>
+            {candidates.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">No candidates found in org.</p>
+            ) : (
+              <div className="space-y-1">
+                {candidates.map(c => (
+                  <label key={c.user_id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={allocCandidates.includes(c.user_id)}
+                      onChange={e => {
+                        setAllocCandidates(prev => e.target.checked
+                          ? [...prev, c.user_id]
+                          : prev.filter(id => id !== c.user_id));
+                      }}
+                      className="rounded border-gray-300" />
+                    <span className="text-sm text-gray-800">{c.name}</span>
+                    <span className="text-xs text-gray-400 ml-auto">{c.total_interviews} interviews</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="outline" size="sm" onClick={() => setAllocatingDriveId(null)}>Cancel</Button>
+              <Button size="sm" className="bg-[#DC2626] hover:bg-[#B91C1C]" disabled={allocCandidates.length === 0}
+                onClick={async () => {
+                  try {
+                    await apiFetch(`/orgs/${orgId}/drives/${allocatingDriveId}/allocate`, token, {
+                      method: 'POST',
+                      body: JSON.stringify({ user_ids: allocCandidates }),
+                    });
+                    setAllocatingDriveId(null);
+                    load();
+                  } catch (err) { console.error('Allocate failed', err); }
+                }}>
+                Allocate {allocCandidates.length > 0 && `(${allocCandidates.length})`}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

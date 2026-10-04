@@ -91,3 +91,15 @@ class DriveAllocation(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     drive: Mapped["PlacementDrive"] = relationship(back_populates="allocations")
+
+
+class ExamAssignment(Base):
+    __tablename__ = "exam_assignments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exam_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("platform_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

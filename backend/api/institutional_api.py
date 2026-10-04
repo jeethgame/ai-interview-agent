@@ -424,6 +424,48 @@ async def analytics_candidates(
         raise HTTPException(status_code=500, detail="Failed to fetch candidate analytics")
 
 
+# ── Candidate-facing: my assignments ─────────────────────────────────────
+
+me_router = APIRouter(prefix="/me", tags=["candidate-assignments"])
+
+
+@me_router.get("/assignments")
+async def get_my_assignments(user: dict = Depends(get_current_user)):
+    """Return logged-in candidate's interview + exam assignments."""
+    try:
+        from sqlalchemy import text
+        db = await _db()
+        uid = user["id"]
+
+        interviews_q = await db.execute(text("""
+            SELECT da.id, da.status, da.session_id,
+                   pd.title, pd.target_role, pd.company,
+                   pd.scheduled_at, pd.duration_minutes,
+                   pd.interview_style, pd.difficulty
+            FROM drive_allocations da
+            JOIN placement_drives pd ON pd.id = da.drive_id
+            WHERE da.user_id = :uid
+            ORDER BY pd.scheduled_at DESC NULLS LAST
+        """), {"uid": uid})
+        interviews = [dict(r) for r in interviews_q.mappings().fetchall()]
+
+        exams_q = await db.execute(text("""
+            SELECT ea.id, ea.status, ea.exam_id, ea.deadline,
+                   fe.title, fe.time_limit_seconds AS duration_minutes
+            FROM exam_assignments ea
+            LEFT JOIN formal_exams fe ON fe.id = ea.exam_id
+            WHERE ea.user_id = :uid
+            ORDER BY ea.deadline DESC NULLS LAST
+        """), {"uid": uid})
+        exams = [dict(r) for r in exams_q.mappings().fetchall()]
+
+        return {"interviews": interviews, "exams": exams}
+    except Exception as e:
+        logger.error(f"get_my_assignments failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch assignments")
+
+
 def create_institutional_api(app):
     app.include_router(router)
-    logger.info("Institutional API routes registered (/orgs/*)")
+    app.include_router(me_router)
+    logger.info("Institutional API routes registered (/orgs/*, /me/*)")

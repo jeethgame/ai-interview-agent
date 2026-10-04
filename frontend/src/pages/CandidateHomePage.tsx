@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
+import { getMyAssignments } from '@/services/api';
 import {
   Mic, Code2, Clock, CheckCircle2, ChevronRight, AlertCircle,
   TrendingUp, Target, Calendar, Play, BarChart3, Flame,
@@ -211,15 +212,34 @@ const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }
 const CandidateHomePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [tests, setTests] = useState<AssignedTest[]>(MOCK_TESTS);
+  const [interviews, setInterviews] = useState<AssignedInterview[]>(MOCK_INTERVIEWS);
+
+  useEffect(() => {
+    getMyAssignments().then(data => {
+      if (data.exams?.length || data.interviews?.length) {
+        setTests(data.exams.map(e => ({
+          id: e.exam_id, title: e.title || 'Exam', topic: 'Assigned', company: undefined,
+          duration_minutes: e.duration_minutes || 60, deadline: e.deadline || undefined,
+          status: (e.status as AssignedTest['status']) || 'pending', difficulty: 'Medium', problem_count: 0,
+        })));
+        setInterviews(data.interviews.map(i => ({
+          id: i.session_id || i.id, role: i.target_role || 'Interview', company: i.company || undefined,
+          style: i.interview_style || 'Formal', duration_minutes: i.duration_minutes,
+          deadline: i.scheduled_at || undefined, status: (i.status as AssignedInterview['status']) || 'pending',
+        })));
+      }
+    }).catch(() => {});
+  }, []);
 
   const firstName = user?.name?.split(' ')[0] || 'Student';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  const pendingTests = MOCK_TESTS.filter(t => t.status === 'pending').length;
-  const pendingInterviews = MOCK_INTERVIEWS.filter(i => i.status === 'pending').length;
-  const completedInterviews = MOCK_INTERVIEWS.filter(i => i.status === 'completed').length;
-  const avgScore = MOCK_INTERVIEWS.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
+  const pendingTests = tests.filter(t => t.status === 'pending').length;
+  const pendingInterviews = interviews.filter(i => i.status === 'pending').length;
+  const completedInterviews = interviews.filter(i => i.status === 'completed').length;
+  const avgScore = interviews.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
 
   const stats: { icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }[] = [
     { icon: <BarChart3 size={18} />, label: 'Interviews Done', value: completedInterviews, sub: 'this semester', color: '#DC2626' },
@@ -229,8 +249,8 @@ const CandidateHomePage: React.FC = () => {
   ];
 
   const urgentItems = [
-    ...MOCK_TESTS.filter(t => t.status === 'pending').map(t => ({ ...t, type: 'test' as const })),
-    ...MOCK_INTERVIEWS.filter(i => i.status === 'pending').map(i => ({ ...i, type: 'interview' as const })),
+    ...tests.filter(t => t.status === 'pending').map(t => ({ ...t, type: 'test' as const })),
+    ...interviews.filter(i => i.status === 'pending').map(i => ({ ...i, type: 'interview' as const })),
   ].filter(item => {
     const dl = relativeDate((item as any).deadline);
     return dl && !dl.label.includes('Expired');
@@ -290,7 +310,7 @@ const CandidateHomePage: React.FC = () => {
                 <Code2 size={16} className="text-[#DC2626]" />
                 <h2 className="text-sm font-black text-[#111827]">Coding Tests</h2>
                 <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {MOCK_TESTS.filter(t => t.status === 'pending').length} pending
+                  {tests.filter(t => t.status === 'pending').length} pending
                 </span>
               </div>
               <Link to="/coding" className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-0.5 transition-colors">
@@ -298,7 +318,7 @@ const CandidateHomePage: React.FC = () => {
               </Link>
             </div>
             <div className="space-y-3">
-              {MOCK_TESTS.map(test => <TestCard key={test.id} test={test} />)}
+              {tests.map(test => <TestCard key={test.id} test={test} />)}
             </div>
           </section>
 
@@ -309,12 +329,12 @@ const CandidateHomePage: React.FC = () => {
                 <Mic size={16} className="text-[#DC2626]" />
                 <h2 className="text-sm font-black text-[#111827]">AI Interviews</h2>
                 <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {MOCK_INTERVIEWS.filter(i => i.status === 'pending').length} pending
+                  {interviews.filter(i => i.status === 'pending').length} pending
                 </span>
               </div>
             </div>
             <div className="space-y-3">
-              {MOCK_INTERVIEWS.map(interview => <InterviewCard key={interview.id} interview={interview} />)}
+              {interviews.map(interview => <InterviewCard key={interview.id} interview={interview} />)}
             </div>
           </section>
         </div>

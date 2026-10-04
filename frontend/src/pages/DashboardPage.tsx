@@ -5,8 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const AdminDashboard = lazy(() => import('@/components/AdminDashboard'));
 
 const DashboardPage: React.FC = () => {
-  const { user } = useAuth();
-  // Use a demo org ID — in production this comes from user.org_id
+  const { user, getToken } = useAuth();
   const orgId = (user as any)?.org_id || 'demo-org-id';
 
   return (
@@ -15,7 +14,7 @@ const DashboardPage: React.FC = () => {
       <Suspense fallback={
         <div className="p-8 text-center text-gray-400 animate-pulse">Loading dashboard…</div>
       }>
-        <AdminDashboard orgId={orgId} />
+        <AdminDashboard orgId={orgId} token={getToken() || undefined} />
       </Suspense>
     </div>
   );
