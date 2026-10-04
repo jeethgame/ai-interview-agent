@@ -1,0 +1,11 @@
+#!/bin/bash
+# Update graphify knowledge graph after every commit
+# Incremental AST-only scan — no API cost, typically 2-5s
+GRAPHIFY="C:/Users/praje/AppData/Local/Programs/Python/Python310/Scripts/graphify.EXE"
+
+if command -v graphify &>/dev/null; then
+    graphify update . --quiet 2>/dev/null &
+elif [ -f "$GRAPHIFY" ]; then
+    "$GRAPHIFY" update . --quiet 2>/dev/null &
+fi
+# Run in background so commit doesn't block
