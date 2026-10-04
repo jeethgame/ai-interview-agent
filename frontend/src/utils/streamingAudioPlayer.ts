@@ -1,3 +1,4 @@
+// @deprecated — replaced by native WebRTC browser audio playback via Voxie. Remove in follow-up PR.
 /**
  * Web Audio API PCM streaming player for Gemini Live / Nova Sonic.
  * Plays 24kHz 16-bit linear PCM chunks seamlessly.

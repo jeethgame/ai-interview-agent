@@ -1,8 +1,24 @@
+/**
+ * useVoiceFirstInterview — Voxie WebRTC (WHIP) edition.
+ *
+ * Transport: WebRTC WHIP → Voxie daemon (:8080)
+ * STT/TTS:   Deepgram (handled by Voxie Go server — no client-side audio decoding)
+ *
+ * What changed vs the previous WebSocket/PCM edition:
+ *  - startVoiceSession: RTCPeerConnection WHIP handshake instead of WebSocket
+ *  - stopVoiceSession:  pc.close() instead of ws.close() + StreamingAudioPlayer.stop()
+ *  - Audio playback:    browser WebRTC engine (no jitter buffer, no autoplay hacks)
+ *  - VAD waveform:      unchanged — still driven by getUserMedia stream via AnalyserNode
+ *
+ * @deprecated StreamingAudioPlayer — replaced by native WebRTC browser playback via Voxie
+ * @deprecated StreamingSpeechRecognition — replaced by Voxie Deepgram STT
+ */
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Message } from './useInterviewSession';
-import { api, StreamingSpeechRecognition } from '../services/api';
 import { useToast } from './use-toast';
-import { StreamingAudioPlayer } from '../utils/streamingAudioPlayer';
+
+const VOXIE_WHIP_URL = 'http://localhost:8080/whip';
 
 export type VoiceState = {
   microphoneState: 'idle' | 'listening' | 'processing' | 'disabled';
@@ -30,211 +46,200 @@ export function useVoiceFirstInterview(
   const { toast } = useToast();
 
   const [turnState, setTurnState] = useState<'user' | 'ai' | 'idle'>('idle');
-  const setTurn = (s: 'user' | 'ai' | 'idle') => { turnStateRef.current = s; setTurnState(s); };
-  const [audioPlaying, setAudioPlaying] = useState(false);
-  const [microphoneActive, setMicrophoneActive] = useState(false);
+  const turnStateRef = useRef<'user' | 'ai' | 'idle'>('idle');
+  const setTurn = (s: 'user' | 'ai' | 'idle') => {
+    turnStateRef.current = s;
+    setTurnState(s);
+  };
+
+  const [audioPlaying, setAudioPlaying]           = useState(false);
+  const [microphoneActive, setMicrophoneActive]   = useState(false);
   const [voiceActivityLevel, setVoiceActivityLevel] = useState(0);
   const [accumulatedTranscript, setAccumulatedTranscript] = useState('');
-  const [isUserSpeaking, setIsUserSpeaking] = useState(false);
+  const [isUserSpeaking, setIsUserSpeaking]       = useState(false);
 
-  const aiTextRef = useRef<HTMLSpanElement | null>(null);
-  const accumulatedAiTextRef = useRef('');
-  const recognitionRef = useRef<StreamingSpeechRecognition | null>(null);
-  const audioPlayerRef = useRef<StreamingAudioPlayer | null>(null);
+  const aiTextRef      = useRef<HTMLSpanElement | null>(null);
+  const peerRef        = useRef<RTCPeerConnection | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const micStreamRef   = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const vadCleanupRef = useRef<(() => void) | null>(null);
-  const turnStateRef = useRef<'user' | 'ai' | 'idle'>('idle');
-  const clearAiText = () => {
-    accumulatedAiTextRef.current = '';
-    if (aiTextRef.current) aiTextRef.current.textContent = '';
-  };
+  const analyserRef    = useRef<AnalyserNode | null>(null);
+  const vadCleanupRef  = useRef<(() => void) | null>(null);
+
+  // ── VAD waveform (driven by local mic stream — same as before) ────────────
 
   const setupVoiceActivityDetection = useCallback(async () => {
     try {
+      if (!micStreamRef.current) return;
       if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
-      if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
 
-      const stream = recognitionRef.current?.getMediaStream();
-      if (!stream) return;
-      micStreamRef.current = stream;
-
-      const source = audioContextRef.current.createMediaStreamSource(stream);
+      const source = audioContextRef.current.createMediaStreamSource(micStreamRef.current);
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
       const bufferLength = analyserRef.current.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      const dataArray    = new Uint8Array(bufferLength);
       let animId: number;
+
       const update = () => {
-        if (turnStateRef.current === 'ai' && audioPlayerRef.current) {
-          // Drive the wave from actual AI playback audio
-          setVoiceActivityLevel(audioPlayerRef.current.getLevel());
-        } else if (analyserRef.current) {
-          // Drive the wave from mic audio
+        if (analyserRef.current) {
           analyserRef.current.getByteFrequencyData(dataArray);
           const avg = dataArray.reduce((s, v) => s + v, 0) / bufferLength;
           setVoiceActivityLevel(Math.min(1, avg / 128));
+          setIsUserSpeaking(avg > 20);
         }
         animId = requestAnimationFrame(update);
       };
       update();
-      // Return cleanup so the caller can cancel the rAF loop
+
       return () => cancelAnimationFrame(animId);
     } catch (e) {
       console.error('VAD setup error:', e);
     }
   }, []);
 
+  // ── Voice session (Voxie WHIP WebRTC) ─────────────────────────────────────
+
   const startVoiceSession = useCallback(async () => {
-    if (recognitionRef.current) return;
+    if (peerRef.current) return; // already connected
 
     try {
-      if (!audioPlayerRef.current) {
-        audioPlayerRef.current = new StreamingAudioPlayer((isPlaying) => {
-          setAudioPlaying(isPlaying);
-          if (!isPlaying) setTurn('idle');
-        });
-      }
-      await audioPlayerRef.current.unlock();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
 
-      recognitionRef.current = api.createStreamingSpeechRecognition({
-        sessionId: sessionData.sessionId,
+      const pc = new RTCPeerConnection();
+      peerRef.current = pc;
 
-        onConnected: () => {
+      // Send mic audio to Voxie
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      // Receive Deepgram TTS audio from Voxie — browser handles playout + echo cancel
+      pc.ontrack = (event) => {
+        if (!remoteAudioRef.current) {
+          remoteAudioRef.current = new Audio();
+        }
+        remoteAudioRef.current.srcObject = event.streams[0];
+        remoteAudioRef.current.play().catch(console.error);
+        setAudioPlaying(true);
+        setTurn('ai');
+      };
+
+      pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        if (state === 'connected') {
           setMicrophoneActive(true);
           setTurn('idle');
-          // Store VAD cleanup ref to cancel the rAF loop on stop
           setupVoiceActivityDetection().then(cleanup => {
             vadCleanupRef.current = cleanup || null;
           });
-          console.log('🎙️ Voice session connected');
-        },
-
-        onDisconnected: () => {
+          console.log('🎙️ Voxie WHIP connected');
+        }
+        if (state === 'disconnected' || state === 'failed' || state === 'closed') {
           setMicrophoneActive(false);
           setTurn('idle');
-          // Null the ref so startVoiceSession can be called again after reconnect
-          recognitionRef.current = null;
-        },
-
-        onTranscript: (text, isFinal, role) => {
-          if (role === 'assistant') {
-            // Write tokens directly to DOM as they arrive — no queue, no interval
-            if (!isFinal && text && turnStateRef.current === 'ai') {
-              accumulatedAiTextRef.current += text;
-              if (aiTextRef.current) aiTextRef.current.textContent = accumulatedAiTextRef.current;
-            }
-          } else {
-            // Both interim and final user transcripts — replace so it streams live
-            if (text) setAccumulatedTranscript(text);
-            if (isFinal) console.log('📝 User voice captured:', text);
-          }
-        },
-
-        onAudioChunk: (base64Audio) => {
-          const player = audioPlayerRef.current;
-          if (player?.audioContext?.state === 'suspended') player.audioContext.resume();
-          player?.playChunk(base64Audio);
-          setTurn('ai');
-          setAudioPlaying(true);
-        },
-
-        onTurnEnded: () => {
-          console.log('🔄 AI turn ended → user can speak');
-          clearAiText();
-          setTurn('user');
           setAudioPlaying(false);
-          setAccumulatedTranscript('');
-          recognitionRef.current?.setMuted(false);
-        },
+          peerRef.current = null;
+        }
+      };
 
-        onInterviewEnding: () => {
-          setTimeout(() => { onEndInterview?.(); }, 2500);
-        },
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-        onError: (error) => {
-          console.error('Voice error:', error);
-          toast({ title: 'Voice Notice', description: error, variant: 'default' });
+      // WHIP handshake — X-Resource-ID carries our session_id so Voxie maps call_id → session
+      const res = await fetch(VOXIE_WHIP_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/sdp',
+          'X-Resource-ID': sessionData.sessionId ?? '',
         },
-
-        onUserSpeaking: (speaking) => setIsUserSpeaking(speaking),
-        onSpeechStarted: undefined,
-        onUtteranceEnd: undefined,
+        body: offer.sdp,
       });
 
-      await recognitionRef.current.start();
-    } catch (e) {
-      console.error('Failed to start voice session:', e);
-      toast({ title: 'Microphone Error', description: 'Could not connect to voice service.', variant: 'destructive' });
+      if (!res.ok) throw new Error(`WHIP handshake failed: ${res.status}`);
+      const answerSdp = await res.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+    } catch (e: any) {
+      console.error('Failed to start Voxie session:', e);
+      peerRef.current?.close();
+      peerRef.current = null;
+      toast({
+        title: 'Voice Error',
+        description: e?.message ?? 'Could not connect to Voxie. Is the daemon running?',
+        variant: 'destructive',
+      });
     }
-  }, [setupVoiceActivityDetection, toast, sessionData.sessionId, onEndInterview]);
+  }, [setupVoiceActivityDetection, toast, sessionData.sessionId]);
 
   const stopVoiceSession = useCallback(() => {
-    // Cancel the VAD rAF loop
     vadCleanupRef.current?.();
     vadCleanupRef.current = null;
 
-    if (audioPlayerRef.current) audioPlayerRef.current.stop();
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
+    peerRef.current?.close();
+    peerRef.current = null;
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
+      remoteAudioRef.current.srcObject = null;
+      remoteAudioRef.current = null;
     }
-    // Tear down the VAD AudioContext
+
+    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micStreamRef.current = null;
+
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
     analyserRef.current = null;
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(t => t.stop());
-      micStreamRef.current = null;
-    }
-    clearAiText();
+
     setMicrophoneActive(false);
     setTurn('idle');
     setAudioPlaying(false);
     setAccumulatedTranscript('');
     setIsUserSpeaking(false);
+    setVoiceActivityLevel(0);
   }, []);
 
   useEffect(() => {
-    return () => {
-      stopVoiceSession();
-      audioPlayerRef.current?.close();
-      audioPlayerRef.current = null;
-    };
+    return () => stopVoiceSession();
   }, [stopVoiceSession]);
 
-  const isListening = microphoneActive && turnState !== 'ai';
-  const isProcessing = false;
-  const isDisabled = sessionData.state !== 'interviewing';
+  // ── Derived state ──────────────────────────────────────────────────────────
 
-  // No-op stub for backward compatibility
+  const isListening  = microphoneActive && turnState !== 'ai';
+  const isProcessing = false;
+  const isDisabled   = sessionData.state !== 'interviewing';
+
   const toggleMicrophone = useCallback(async () => {
-    if (!recognitionRef.current) await startVoiceSession();
+    if (!peerRef.current) await startVoiceSession();
   }, [startVoiceSession]);
 
+  // Voxie handles turn detection — finishAnswer is a no-op in WebRTC mode
   const finishAnswer = useCallback(() => {
-    if (!recognitionRef.current) return;
-    audioPlayerRef.current?.unlock();
-    recognitionRef.current.setMuted(true);
-    recognitionRef.current.sendEndOfTurn();
-    setTurn('ai');
+    console.log('finishAnswer: turn management delegated to Voxie VAD');
   }, []);
 
   return {
-    messages: sessionData.messages,
-    isLoading: sessionData.isLoading,
-    state: sessionData.state,
-    results: sessionData.results,
+    messages:      sessionData.messages,
+    isLoading:     sessionData.isLoading,
+    state:         sessionData.state,
+    results:       sessionData.results,
     selectedVoice: sessionData.selectedVoice,
 
-    voiceState: { microphoneState: 'listening' as const, audioState: 'idle' as const, turnState, audioPlaying, voiceActivity: { isDetected: false, volume: 0, timestamp: 0 } },
+    voiceState: {
+      microphoneState: 'listening' as const,
+      audioState:      'idle' as const,
+      turnState,
+      audioPlaying,
+      voiceActivity: { isDetected: false, volume: 0, timestamp: 0 },
+    },
     microphoneActive,
     audioPlaying,
     voiceActivityLevel,
@@ -252,12 +257,12 @@ export function useVoiceFirstInterview(
     startVoiceSession,
     stopVoiceSession,
     finishAnswer,
-    toggleTranscript: () => {},
-    toggleCoachFeedback: () => {},
-    closeCoachFeedback: () => {},
-    handleTTSStart: () => {},
-    handleTTSEnd: () => {},
-    playTextToSpeech: async (_: string) => {},
+    toggleTranscript:     () => {},
+    toggleCoachFeedback:  () => {},
+    closeCoachFeedback:   () => {},
+    handleTTSStart:       () => {},
+    handleTTSEnd:         () => {},
+    playTextToSpeech:     async (_: string) => {},
     lastExchange: { userMessage: '', aiMessage: '' },
   };
 }
