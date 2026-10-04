@@ -59,7 +59,7 @@ CONTEXT.md
 setup_guide.md
 FRONTEND_DOCUMENTATION.md
 backend/BACKEND_DOCUMENTATION.md
-docs/
+# docs/   ← unignored so architecture diagrams are tracked
 integration/
 scripts/
 tests/PHASE_IV_VALIDATION.md
