@@ -217,6 +217,10 @@ const LiveExam: React.FC<{
     return () => clearInterval(t);
   }, []);
 
+  React.useEffect(() => {
+    if (timeLeft === 0) onSubmit();
+  }, [timeLeft]);
+
   const fmt = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const urgentTime = timeLeft < 300;
 

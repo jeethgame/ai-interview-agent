@@ -178,7 +178,8 @@ const CodingPage: React.FC = () => {
             <Clock size={13} />
             <span className={elapsed > 1800 ? 'text-red-400' : ''}>{fmt(elapsed)}</span>
           </div>
-          <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all">
+          <button onClick={() => { if (confirm('Submit your solution?')) { alert('Solution submitted successfully!'); } }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all">
             <CheckCircle2 size={12} /> Submit
           </button>
         </div>

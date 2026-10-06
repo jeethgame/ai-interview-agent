@@ -9,7 +9,7 @@ import {
   BookOpen, Award, ArrowRight, Bell, Star
 } from 'lucide-react';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8002';
+const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8010';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -45,14 +45,14 @@ interface Stats {
 
 // ── Mock data for now (replace with real API when endpoints ready) ─────────
 const MOCK_TESTS: AssignedTest[] = [
-  { id: 'exam-001', title: 'TCS Digital — DSA Round 1', company: 'TCS', topic: 'Arrays & Strings', duration_minutes: 60, deadline: '2026-10-02T18:00:00', status: 'pending', difficulty: 'Medium', problem_count: 3 },
-  { id: 'exam-002', title: 'Infosys SP — Python Basics', company: 'Infosys', topic: 'Python', duration_minutes: 45, deadline: '2026-10-05T10:00:00', status: 'pending', difficulty: 'Easy', problem_count: 2 },
-  { id: 'exam-003', title: 'Zoho — Data Structures', company: 'Zoho', topic: 'Linked Lists', duration_minutes: 90, deadline: '2026-09-28T09:00:00', status: 'completed', difficulty: 'Hard', problem_count: 4 },
+  { id: 'exam-001', title: 'TCS Digital — DSA Round 1', company: 'TCS', topic: 'Arrays & Strings', duration_minutes: 60, deadline: '2026-11-15T18:00:00', status: 'pending', difficulty: 'Medium', problem_count: 3 },
+  { id: 'exam-002', title: 'Infosys SP — Python Basics', company: 'Infosys', topic: 'Python', duration_minutes: 45, deadline: '2026-11-20T10:00:00', status: 'pending', difficulty: 'Easy', problem_count: 2 },
+  { id: 'exam-003', title: 'Zoho — Data Structures', company: 'Zoho', topic: 'Linked Lists', duration_minutes: 90, status: 'completed', difficulty: 'Hard', problem_count: 4 },
 ];
 
 const MOCK_INTERVIEWS: AssignedInterview[] = [
-  { id: 'int-001', role: 'Software Engineer', company: 'Wipro', style: 'Technical', duration_minutes: 30, deadline: '2026-10-03T14:00:00', status: 'pending' },
-  { id: 'int-002', role: 'Backend Developer', company: 'HCL', style: 'Formal', duration_minutes: 20, deadline: '2026-10-06T11:00:00', status: 'pending' },
+  { id: 'int-001', role: 'Software Engineer', company: 'Wipro', style: 'Technical', duration_minutes: 30, deadline: '2026-11-18T14:00:00', status: 'pending' },
+  { id: 'int-002', role: 'Backend Developer', company: 'HCL', style: 'Formal', duration_minutes: 20, deadline: '2026-11-22T11:00:00', status: 'pending' },
   { id: 'int-003', role: 'Full Stack Developer', company: 'Cognizant', style: 'Technical', duration_minutes: 30, status: 'completed', score: 78 },
 ];
 

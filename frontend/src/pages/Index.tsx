@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useInterviewSession } from '@/hooks/useInterviewSession';
 import Header from '@/components/Header';
 import InterviewSession from '@/components/InterviewSession';
@@ -35,6 +36,8 @@ const Index = () => {
   
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const sessionParam = searchParams.get('session');
 
   // Backend health check states
   const [isBackendDown, setIsBackendDown] = useState(false);

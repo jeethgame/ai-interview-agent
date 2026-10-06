@@ -69,7 +69,7 @@ const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-8 h-16">
 
         {/* Brand */}
-        <Link to={isAuthenticated ? (isCandidate ? '/interview' : '/dashboard') : '/'} className="flex items-center gap-2.5 group select-none">
+        <Link to={isAuthenticated ? (isCandidate ? '/home' : '/dashboard') : '/'} className="flex items-center gap-2.5 group select-none">
           <div className="w-8 h-8 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
             <Mic size={16} className="text-white" />
           </div>

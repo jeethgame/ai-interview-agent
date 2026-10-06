@@ -135,7 +135,7 @@ const LoginPage: React.FC = () => {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-[#111827]">Password</label>
-                <button type="button" className="text-xs text-[#DC2626] hover:underline font-medium">
+                <button type="button" onClick={() => alert('Password reset will be available after Cognito setup.')} className="text-xs text-gray-400 hover:text-gray-500 font-medium">
                   Forgot password?
                 </button>
               </div>
@@ -187,7 +187,7 @@ const LoginPage: React.FC = () => {
                   { label: 'Admin', email: 'admin@dev.example.com', pwd: 'Test1234!', hint: '→ /dashboard' },
                 ].map(({ label, email: e, pwd, hint }) => (
                   <button key={label} type="button"
-                    onClick={() => { setEmail(e); setPassword(pwd); }}
+                    onClick={() => { setEmail(e); setPassword(pwd); setTimeout(() => document.querySelector<HTMLFormElement>('form')?.requestSubmit(), 50); }}
                     className="flex-1 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500
                       hover:border-[#DC2626]/30 hover:text-[#DC2626] transition-colors">
                     <div>{label}</div>

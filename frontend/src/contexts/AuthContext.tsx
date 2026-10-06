@@ -61,12 +61,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const updated = { ...parsed, ...data, role: data.role || parsed.role || 'candidate' };
           setUser(updated);
           localStorage.setItem(USER_KEY, JSON.stringify(updated));
-        } catch {
-          localStorage.removeItem(ACCESS_TOKEN_KEY);
-          localStorage.removeItem(REFRESH_TOKEN_KEY);
-          localStorage.removeItem(USER_KEY);
-          setUser(null);
-          delete axios.defaults.headers.common['Authorization'];
+        } catch (err: any) {
+          // Only wipe tokens on 401 (invalid/expired token) — not on network errors
+          if (err?.response?.status === 401) {
+            localStorage.removeItem(ACCESS_TOKEN_KEY);
+            localStorage.removeItem(REFRESH_TOKEN_KEY);
+            localStorage.removeItem(USER_KEY);
+            setUser(null);
+            delete axios.defaults.headers.common['Authorization'];
+          }
+          // On network error / CORS / timeout: keep stored user, don't force logout
         }
       }
       setIsLoading(false);

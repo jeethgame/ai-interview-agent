@@ -17,11 +17,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-class ChatGroqViaOpenAI(BaseChatModel):
+class ChatOpenAICompatible(BaseChatModel):
     """
-    Minimal LangChain BaseChatModel that calls Groq's OpenAI-compatible API.
-    Uses the already-installed `openai` package. No langchain-openai or
-    langchain-groq needed. Remove when no longer required.
+    Minimal LangChain BaseChatModel that calls any OpenAI-compatible API.
+    Works with Groq, OpenAI, Together, OpenRouter, Ollama, etc.
+    Uses the already-installed `openai` package.
     """
     model_name: str = ""
     api_key: str = ""
@@ -30,7 +30,7 @@ class ChatGroqViaOpenAI(BaseChatModel):
 
     @property
     def _llm_type(self) -> str:
-        return "groq-via-openai"
+        return "openai-compatible"
 
     def _generate(
         self,
@@ -80,8 +80,8 @@ class LLMService:
     """
     Manages the initialization and access to the LLM instance.
     Supports two providers via COACH_LLM_PROVIDER env var:
+      - "openai" / "groq" : ChatOpenAICompatible (any OpenAI-compatible endpoint — Groq, OpenAI, Together, etc.)
       - "gemini" (default): ChatGoogleGenerativeAI
-      - "groq": ChatGroqViaOpenAI (OpenAI-compatible endpoint)
     """
     def __init__(self,
                  api_key: Optional[str] = None,
@@ -93,14 +93,14 @@ class LLMService:
 
         self.provider = os.environ.get("COACH_LLM_PROVIDER", "gemini").lower().strip()
 
-        if self.provider == "groq":
-            self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+        if self.provider in ("groq", "openai"):
+            self.api_key = api_key or os.environ.get("LLM_API_KEY") or os.environ.get("GROQ_API_KEY")
             if not self.api_key:
-                self.logger.error("Groq API key not found. Set GROQ_API_KEY environment variable.")
-                raise ValueError("Groq API key is required when COACH_LLM_PROVIDER=groq.")
-            self.base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai")
-            self.model_name = model_name or os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-            self.logger.info(f"LLMService initialized with Groq provider, model: {self.model_name}")
+                self.logger.error("LLM API key not found. Set LLM_API_KEY or GROQ_API_KEY.")
+                raise ValueError("LLM API key is required when COACH_LLM_PROVIDER=groq/openai.")
+            self.base_url = os.environ.get("LLM_BASE_URL") or os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai")
+            self.model_name = model_name or os.environ.get("LLM_MODEL") or os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+            self.logger.info(f"LLMService initialized with OpenAI-compatible provider, model: {self.model_name}")
         else:
             self.api_key = api_key or os.environ.get("GOOGLE_API_KEY")
             if not self.api_key:
@@ -112,16 +112,22 @@ class LLMService:
 
     def get_llm(self) -> BaseChatModel:
         """Returns the default LLM instance."""
-        return self.get_evaluator_llm() if self.provider == "groq" else self.get_interviewer_llm()
+        return self.get_evaluator_llm() if self.provider in ("groq", "openai") else self.get_interviewer_llm()
 
     def get_interviewer_llm(self) -> BaseChatModel:
         """
-        Returns Gemini 2.5 Flash model specifically for the Interviewer Agent.
+        Returns LLM for the Interviewer Agent.
+        Prefers OpenAI-compatible (Groq etc.) if configured; falls back to Gemini.
         """
+        # Use OpenAI-compatible if key available (same provider as evaluator)
+        api_key = os.environ.get("LLM_API_KEY") or os.environ.get("GROQ_API_KEY")
+        if api_key and not api_key.startswith("your_"):
+            return self.get_evaluator_llm()
+
         google_api_key = os.environ.get("GOOGLE_API_KEY")
         if not google_api_key:
-            self.logger.error("Google API key not found for Interviewer Agent. Set GOOGLE_API_KEY.")
-            raise ValueError("GOOGLE_API_KEY is required for Interviewer Agent (gemini-2.5-flash).")
+            self.logger.error("No LLM API key found. Set GROQ_API_KEY or GOOGLE_API_KEY.")
+            raise ValueError("No LLM API key configured. Set GROQ_API_KEY (or LLM_API_KEY) or GOOGLE_API_KEY.")
 
         model_name = os.environ.get("GOOGLE_MODEL_NAME", "gemini-2.5-flash")
         self.logger.info(f"Initializing Interviewer Agent LLM: {model_name}")
@@ -134,22 +140,23 @@ class LLMService:
 
     def get_evaluator_llm(self) -> BaseChatModel:
         """
-        Returns Groq model specifically for the Evaluator / Coach Agent.
-        Falls back to Gemini 2.5 Flash if Groq API key is not configured.
+        Returns OpenAI-compatible model for the Evaluator / Coach Agent.
+        Works with Groq, OpenAI, Together, OpenRouter — any provider with /v1/chat/completions.
+        Falls back to Gemini if no OpenAI-compatible key is configured.
         """
-        groq_api_key = os.environ.get("GROQ_API_KEY")
-        if groq_api_key and not groq_api_key.startswith("your_"):
-            base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai")
-            model_name = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-            self.logger.info(f"Initializing Evaluator Agent LLM with Groq provider: {model_name}")
-            return ChatGroqViaOpenAI(
+        api_key = os.environ.get("LLM_API_KEY") or os.environ.get("GROQ_API_KEY")
+        if api_key and not api_key.startswith("your_"):
+            base_url = os.environ.get("LLM_BASE_URL") or os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai")
+            model_name = os.environ.get("LLM_MODEL") or os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+            self.logger.info(f"Initializing Evaluator Agent LLM (OpenAI-compatible): {model_name}")
+            return ChatOpenAICompatible(
                 model_name=model_name,
-                api_key=groq_api_key,
+                api_key=api_key,
                 base_url=base_url,
                 temperature=self.temperature,
             )
 
-        self.logger.info("GROQ_API_KEY not set for Evaluator Agent — falling back to Gemini 2.5 Flash.")
+        self.logger.info("No OpenAI-compatible API key set — falling back to Gemini.")
         return self.get_interviewer_llm()
 
 
