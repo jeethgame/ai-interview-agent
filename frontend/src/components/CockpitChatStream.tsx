@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Message } from '@/hooks/useInterviewSession';
+import { AICSSOrb } from './aicss/AICSSOrb';
 
 interface CockpitChatStreamProps {
   messages: Message[];
@@ -12,14 +13,6 @@ interface CockpitChatStreamProps {
   isUserSpeaking?: boolean;
   audioPlaying?: boolean;
 }
-
-const SparkleIcon: React.FC = () => (
-  <div className="inline-grid grid-cols-3 gap-[2px]">
-    {Array.from({ length: 9 }).map((_, i) => (
-      <span key={i} className="w-[3px] h-[3px] rounded-full bg-[#DC2626] opacity-60" />
-    ))}
-  </div>
-);
 
 const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
   messages,
@@ -53,7 +46,7 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
     <div
       className="flex flex-col gap-4 w-full max-w-2xl mx-auto overflow-y-auto px-6 py-4 scroll-smooth"
       style={{
-        maxHeight: 'calc(100vh - 200px)',
+        maxHeight: 'calc(100vh - 220px)',
         maskImage: 'linear-gradient(to bottom, transparent 0%, black 8%, black 100%)',
         WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 8%, black 100%)',
       }}
@@ -65,36 +58,48 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
 
         if (isAI) {
           return (
-            <div key={idx} className="flex items-start gap-3 max-w-[90%]" style={{ opacity: isOld ? 0.35 : 1, transition: 'opacity 0.4s' }}>
-              <div className="w-7 h-7 rounded-lg bg-[#DC2626]/10 border border-[#DC2626]/20 flex items-center justify-center shrink-0 mt-0.5">
-                <SparkleIcon />
+            <div
+              key={idx}
+              className="flex items-start gap-3.5 max-w-[90%]"
+              style={{ opacity: isOld ? 0.38 : 1, transition: 'opacity 0.4s ease' }}
+            >
+              <div className="shrink-0 mt-0.5">
+                <AICSSOrb state="idle" size="xs" />
               </div>
-              <p className="text-[14px] leading-[1.7] text-[#111827] whitespace-pre-wrap break-words">{text}</p>
+              <div className="p-3.5 rounded-2xl rounded-tl-sm bg-white/90 border border-gray-100 shadow-sm backdrop-blur-sm">
+                <p className="text-[14px] leading-[1.7] text-[#111827] whitespace-pre-wrap break-words">
+                  {text}
+                </p>
+              </div>
             </div>
           );
         }
 
         return (
           <div key={idx} className="flex justify-end">
-            <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-[#FEF3C7] border border-[#EAB308]/40 text-[14px] text-[#111827] leading-relaxed whitespace-pre-wrap break-words">
+            <div className="max-w-[82%] px-4 py-3 rounded-2xl rounded-br-sm bg-gradient-to-br from-[#FEF3C7] to-[#FDE68A]/60 border border-[#EAB308]/40 text-[14px] text-[#111827] leading-relaxed shadow-sm whitespace-pre-wrap break-words">
               {text}
             </div>
           </div>
         );
       })}
 
-      {/* ── Live AI Turn ── single unified bubble for Thinking / Speaking */}
+      {/* ── Live AI Turn with AICSS Orb ── */}
       {turnState === 'ai' && (
-        <div className="flex items-start gap-3 max-w-[90%]">
-          <div className="w-7 h-7 rounded-lg bg-[#DC2626]/10 border border-[#DC2626]/20 flex items-center justify-center shrink-0 mt-0.5">
-            <SparkleIcon />
+        <div className="flex items-start gap-3.5 max-w-[92%] animate-fade-in">
+          <div className="shrink-0 mt-1">
+            <AICSSOrb
+              state={audioPlaying ? 'speaking' : isProcessing ? 'thinking' : 'thinking'}
+              voiceActivity={audioPlaying ? 0.6 : 0.2}
+              size="sm"
+            />
           </div>
-          <div className="flex flex-col gap-1.5 min-w-0">
+          <div className="flex flex-col gap-2 min-w-0 p-4 rounded-2xl rounded-tl-sm bg-white/95 border border-red-100 shadow-md backdrop-blur-md">
             {/* Status label row */}
             <div className="flex items-center gap-2">
               {audioPlaying ? (
                 <>
-                  {/* audio-bar animation */}
+                  {/* Live audio bars */}
                   <div className="flex gap-[3px] items-end h-3.5">
                     {[1, 1.8, 1.3, 2, 1.5, 1.8, 1].map((h, i) => (
                       <span
@@ -108,26 +113,30 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
                       />
                     ))}
                   </div>
-                  <span className="text-[11px] font-bold text-[#DC2626] uppercase tracking-widest">Speaking</span>
+                  <span className="text-[11px] font-bold text-[#DC2626] uppercase tracking-widest">
+                    AI Speaking
+                  </span>
                 </>
               ) : (
                 <>
-                  {/* bouncing dots */}
+                  {/* Thinking status */}
                   <div className="flex gap-[5px] items-center">
                     {[0, 0.18, 0.36].map((d, i) => (
                       <span
                         key={i}
-                        className="w-[5px] h-[5px] rounded-full bg-[#DC2626] animate-bounce"
+                        className="w-[5px] h-[5px] rounded-full bg-[#8B5CF6] animate-bounce"
                         style={{ animationDelay: `${d}s` }}
                       />
                     ))}
                   </div>
-                  <span className="text-[11px] font-bold text-[#DC2626] uppercase tracking-widest">Thinking…</span>
+                  <span className="text-[11px] font-bold text-[#8B5CF6] uppercase tracking-widest">
+                    Synthesizing response…
+                  </span>
                 </>
               )}
             </div>
 
-            {/* Streaming transcript — written directly to DOM via aiTextRef with zero React re-renders */}
+            {/* Streaming transcript */}
             <p className="text-[14px] leading-[1.7] text-[#111827] whitespace-pre-wrap break-words">
               <span ref={aiTextRef} />
               <span className="inline-block w-[3px] h-[15px] bg-[#DC2626] ml-1 align-middle animate-pulse rounded-sm" />
@@ -136,10 +145,10 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
         </div>
       )}
 
-      {/* ── User speaking / transcript bubble — only during user turn ── */}
+      {/* ── User speaking / transcript bubble ── */}
       {turnState === 'user' && (isUserSpeaking || accumulatedTranscript) && (
-        <div className="flex justify-end">
-          <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-[#FEF3C7] border border-[#EAB308]/40">
+        <div className="flex justify-end animate-fade-in">
+          <div className="max-w-[82%] px-4 py-3 rounded-2xl rounded-br-sm bg-gradient-to-br from-[#FEF3C7] to-[#FDE68A]/80 border border-[#EAB308]/50 shadow-sm">
             {accumulatedTranscript ? (
               <p className="text-[14px] text-[#111827] leading-relaxed whitespace-pre-wrap break-words">
                 {accumulatedTranscript}
@@ -148,10 +157,14 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
               <div className="flex items-center gap-2">
                 <div className="flex gap-[3px] items-end h-4">
                   {[1, 1.5, 2, 1.5, 1].map((h, i) => (
-                    <span key={i} className="w-1 bg-[#EAB308] rounded-full animate-bounce" style={{ height: `${h * 6}px`, animationDelay: `${i * 0.1}s` }} />
+                    <span
+                      key={i}
+                      className="w-1 bg-[#EAB308] rounded-full animate-bounce"
+                      style={{ height: `${h * 6}px`, animationDelay: `${i * 0.1}s` }}
+                    />
                   ))}
                 </div>
-                <span className="text-xs font-semibold text-[#92400E]">Speaking…</span>
+                <span className="text-xs font-semibold text-[#92400E]">Listening to your voice…</span>
               </div>
             )}
           </div>
@@ -160,9 +173,9 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
 
       {/* ── Listening indicator ── */}
       {isListening && !isUserSpeaking && turnState !== 'ai' && (
-        <div className="flex items-center gap-2 justify-end">
-          <span className="text-xs font-medium text-[#EAB308]">Listening</span>
-          <span className="w-2 h-2 rounded-full bg-[#EAB308] animate-pulse" />
+        <div className="flex items-center gap-2 justify-end text-xs text-amber-700 bg-amber-50/70 border border-amber-200/60 px-3 py-1.5 rounded-full w-fit ml-auto shadow-xs">
+          <span>Mic active</span>
+          <span className="w-2 h-2 rounded-full bg-[#EAB308] animate-ping" />
         </div>
       )}
 
