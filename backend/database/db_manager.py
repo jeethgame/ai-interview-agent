@@ -1,442 +1,268 @@
 """
-Database manager for handling all database operations with Supabase.
-Provides session management, speech task tracking, and user data persistence.
+Database manager — all agent operations via SQLAlchemy async (RDS PostgreSQL).
+Replaces the Supabase SDK client.
 """
 
-import os
+import uuid
 import json
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime
-from supabase import create_client, Client
+from datetime import datetime, timedelta
+
+from sqlalchemy import select, update, delete, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.config import get_logger
 
 logger = get_logger(__name__)
 
 
-class DatabaseManager:
-    """
-    Manages all database operations for the AI Interviewer Agent.
-    Handles session persistence, speech task tracking, and user management.
-    """
-    
-    def __init__(self):
-        """Initialize the database manager with Supabase client."""
-        self.url = os.environ.get("SUPABASE_URL")
-        self.key = os.environ.get("SUPABASE_SERVICE_KEY")
-        
-        if not self.url or not self.key:
-            raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in environment variables")
-        
-        self.supabase: Client = create_client(self.url, self.key)
-        logger.info("DatabaseManager initialized with Supabase client")
+def _get_session() -> AsyncSession:
+    from backend.database import _AsyncSessionLocal
+    return _AsyncSessionLocal()
 
-    # === User Authentication Methods ===
+
+def _is_valid_uuid(val: str) -> bool:
+    try:
+        uuid.UUID(str(val))
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
+class DatabaseManager:
+    """Agent DB operations backed by RDS via SQLAlchemy async."""
+
+    # health-check sentinel so main.py can detect real vs mock
+    rds = True
+
+    # ── User ──────────────────────────────────────────────────────────────
 
     async def register_user(self, email: str, password: str, name: str) -> Dict[str, Any]:
-        """
-        Register a new user with Supabase Auth.
-        
-        Args:
-            email: User email
-            password: User password
-            name: User full name
-            
-        Returns:
-            Dict: Auth data including tokens and user info
-            
-        Raises:
-            Exception: If registration fails
-        """
-        try:
-            # Register user with Supabase Auth
-            auth_response = self.supabase.auth.sign_up({
-                "email": email,
-                "password": password
-            })
-            
-            user_data = auth_response.user
-            session_data = auth_response.session
-            
-            if not user_data or not session_data:
-                raise Exception("User registration failed - no user or session data returned")
-            
-            # Create user record in our users table
-            user_record = {
-                "id": user_data.id,
-                "email": email,
-                "name": name,
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            
-            self.supabase.table("users").insert(user_record).execute()
-            
-            # Format response
-            return {
-                "access_token": session_data.access_token,
-                "refresh_token": session_data.refresh_token,
-                "user": {
-                    "id": user_data.id,
-                    "email": email,
-                    "name": name,
-                    "created_at": user_record["created_at"]
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"User registration failed: {e}")
-            raise Exception(f"User registration failed: {str(e)}")
+        from backend.models.core import PlatformUser
+        import jwt as pyjwt, os
+        user_id = str(uuid.uuid4())
+        async with _get_session() as s:
+            s.add(PlatformUser(id=uuid.UUID(user_id), email=email, name=name,
+                               auth_provider="mock", role="candidate"))
+            await s.commit()
+        token = pyjwt.encode({"sub": user_id, "email": email,
+                               "exp": datetime.utcnow() + timedelta(hours=24)},
+                              os.getenv("SECRET_KEY", "dev"), algorithm="HS256")
+        return {"access_token": token, "refresh_token": token,
+                "user": {"id": user_id, "email": email, "name": name}}
 
     async def login_user(self, email: str, password: str) -> Dict[str, Any]:
-        """
-        Login a user with Supabase Auth.
-        
-        Args:
-            email: User email
-            password: User password
-            
-        Returns:
-            Dict: Auth data including tokens and user info
-            
-        Raises:
-            Exception: If login fails
-        """
-        try:
-            # Login user with Supabase Auth
-            auth_response = self.supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-            
-            user_data = auth_response.user
-            session_data = auth_response.session
-            
-            if not user_data or not session_data:
-                raise Exception("User login failed - no user or session data returned")
-            
-            # Get user's name from our users table
-            user_record = await self.get_user(user_data.id)
-            user_name = user_record.get("name", "") if user_record else ""
-            
-            # Format response
-            return {
-                "access_token": session_data.access_token,
-                "refresh_token": session_data.refresh_token,
-                "user": {
-                    "id": user_data.id,
-                    "email": user_data.email,
-                    "name": user_name,
-                    "created_at": user_data.created_at
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"User login failed: {e}")
-            raise Exception(f"User login failed: {str(e)}")
+        from backend.models.core import PlatformUser
+        import jwt as pyjwt, os
+        async with _get_session() as s:
+            row = (await s.execute(
+                select(PlatformUser).where(PlatformUser.email == email)
+            )).scalar_one_or_none()
+        if not row:
+            raise Exception("User not found")
+        token = pyjwt.encode({"sub": str(row.id), "email": email,
+                               "exp": datetime.utcnow() + timedelta(hours=24)},
+                              os.getenv("SECRET_KEY", "dev"), algorithm="HS256")
+        return {"access_token": token, "refresh_token": token,
+                "user": {"id": str(row.id), "email": email, "name": row.name}}
 
     async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
-        """
-        Refresh an access token using a refresh token.
-        
-        Args:
-            refresh_token: The refresh token
-            
-        Returns:
-            Dict: New auth data including tokens and user info
-            
-        Raises:
-            Exception: If token refresh fails
-        """
-        try:
-            # Refresh token with Supabase Auth
-            auth_response = self.supabase.auth.refresh_session(refresh_token)
-            
-            user_data = auth_response.user
-            session_data = auth_response.session
-            
-            if not user_data or not session_data:
-                raise Exception("Token refresh failed - no user or session data returned")
-            
-            # Format response
-            return {
-                "access_token": session_data.access_token,
-                "refresh_token": session_data.refresh_token,
-                "user": {
-                    "id": user_data.id,
-                    "email": user_data.email,
-                    "created_at": user_data.created_at
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Token refresh failed: {e}")
-            raise Exception(f"Token refresh failed: {str(e)}")
+        import jwt as pyjwt, os
+        payload = pyjwt.decode(refresh_token, os.getenv("SECRET_KEY", "dev"),
+                               algorithms=["HS256"], options={"verify_exp": False})
+        new_token = pyjwt.encode({**payload, "exp": datetime.utcnow() + timedelta(hours=24)},
+                                 os.getenv("SECRET_KEY", "dev"), algorithm="HS256")
+        return {"access_token": new_token, "refresh_token": new_token,
+                "user": {"id": payload.get("sub"), "email": payload.get("email")}}
 
     async def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get a user by ID.
-        
-        Args:
-            user_id: The user ID
-            
-        Returns:
-            Optional[Dict]: User data if found, None otherwise
-        """
-        try:
-            # Get user from our users table
-            result = self.supabase.table("users").select("*").eq("id", user_id).execute()
-            
-            if result.data and len(result.data) > 0:
-                return result.data[0]
-            
+        if not _is_valid_uuid(user_id):
             return None
-            
-        except Exception as e:
-            logger.error(f"Error getting user {user_id}: {e}")
+        from backend.models.core import PlatformUser
+        async with _get_session() as s:
+            row = await s.get(PlatformUser, uuid.UUID(user_id))
+        if not row:
             return None
+        return {"id": str(row.id), "email": row.email, "name": row.name, "role": row.role}
 
-    # === Session Management Methods ===
+    # ── Session ───────────────────────────────────────────────────────────
 
-    async def create_session(self, user_id: Optional[str] = None, 
-                           initial_config: Optional[Dict] = None) -> str:
-        """
-        Create a new interview session.
-        
-        Args:
-            user_id: Optional user ID to associate with the session
-            initial_config: Optional initial session configuration
-            
-        Returns:
-            str: The created session ID
-        """
-        try:
-            session_data = {
-                "user_id": user_id,
-                "session_config": initial_config or {},
-                "conversation_history": [],
-                "per_turn_feedback_log": [],
-                "session_stats": {},
-                "status": "active"
-            }
-            
-            result = self.supabase.table("interview_sessions").insert(session_data).execute()
-            
-            if result.data and len(result.data) > 0:
-                session_id = result.data[0]["session_id"]
-                logger.info(f"Created new session: {session_id}")
-                return str(session_id)
-            else:
-                raise Exception("Failed to create session - no data returned")
-                
-        except Exception as e:
-            logger.error(f"Error creating session: {e}")
-            raise
+    async def create_session(self, user_id: Optional[str] = None,
+                             initial_config: Optional[Dict] = None) -> str:
+        from backend.models.core import InterviewSession, PlatformUser
+        session_id = str(uuid.uuid4())
+
+        # Resolve or create a platform user to satisfy the FK
+        resolved_uid: uuid.UUID
+        if user_id and _is_valid_uuid(user_id):
+            resolved_uid = uuid.UUID(user_id)
+            # Upsert so mock-auth users exist in platform_users
+            async with _get_session() as s:
+                exists = await s.get(PlatformUser, resolved_uid)
+                if not exists:
+                    s.add(PlatformUser(id=resolved_uid, email=f"{user_id}@mock.internal",
+                                       name="Mock User", auth_provider="mock", role="candidate"))
+                    await s.commit()
+        else:
+            # Create/reuse an anonymous platform user
+            anon_email = "anonymous@internal"
+            async with _get_session() as s:
+                row = (await s.execute(
+                    select(PlatformUser).where(PlatformUser.email == anon_email)
+                )).scalar_one_or_none()
+                if not row:
+                    row = PlatformUser(id=uuid.uuid4(), email=anon_email,
+                                       name="Anonymous", auth_provider="mock", role="candidate")
+                    s.add(row)
+                    await s.commit()
+                    await s.refresh(row)
+                resolved_uid = row.id
+
+        async with _get_session() as s:
+            s.add(InterviewSession(
+                id=uuid.UUID(session_id),
+                user_id=resolved_uid,
+                status="active",
+                metadata_={"session_config": initial_config or {},
+                           "conversation_history": [],
+                           "per_turn_feedback_log": [],
+                           "session_stats": {}},
+            ))
+            await s.commit()
+        logger.info(f"Created session: {session_id}")
+        return session_id
 
     async def load_session_state(self, session_id: str) -> Optional[Dict]:
-        """
-        Load complete session state from database.
-        
-        Args:
-            session_id: The session ID to load
-            
-        Returns:
-            Optional[Dict]: Session data if found, None otherwise
-        """
-        try:
-            result = self.supabase.table("interview_sessions").select("*").eq("session_id", session_id).execute()
-            
-            if result.data and len(result.data) > 0:
-                session_data = result.data[0]
-                logger.debug(f"Loaded session state for: {session_id}")
-                return session_data
-            else:
-                logger.warning(f"Session not found: {session_id}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error loading session state for {session_id}: {e}")
+        if not _is_valid_uuid(session_id):
             return None
+        from backend.models.core import InterviewSession
+        async with _get_session() as s:
+            row = await s.get(InterviewSession, uuid.UUID(session_id))
+        if not row:
+            return None
+        meta = row.metadata_ or {}
+        return {
+            "session_id": str(row.id),
+            "user_id": str(row.user_id) if row.user_id else None,
+            "status": row.status,
+            "session_config": meta.get("session_config", {}),
+            "conversation_history": meta.get("conversation_history", []),
+            "per_turn_feedback_log": meta.get("per_turn_feedback_log", []),
+            "final_summary": meta.get("final_summary"),
+            "session_stats": meta.get("session_stats", {}),
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
 
     async def save_session_state(self, session_id: str, state_data: Dict) -> bool:
-        """
-        Save session state to database.
-        
-        Args:
-            session_id: The session ID to update
-            state_data: The session data to save
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            # Extract relevant fields for update
-            update_data = {
-                "session_config": state_data.get("session_config", {}),
-                "conversation_history": state_data.get("conversation_history", []),
-                "per_turn_feedback_log": state_data.get("per_turn_feedback_log", []),
-                "final_summary": state_data.get("final_summary"),
-                "session_stats": state_data.get("session_stats", {}),
-                "status": state_data.get("status", "active"),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            
-            result = self.supabase.table("interview_sessions").update(update_data).eq("session_id", session_id).execute()
-            
-            if result.data:
-                logger.debug(f"Saved session state for: {session_id}")
-                return True
-            else:
-                logger.error(f"Failed to save session state for: {session_id}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error saving session state for {session_id}: {e}")
+        if not _is_valid_uuid(session_id):
             return False
+        from backend.models.core import InterviewSession
+        meta = {
+            "session_config":        state_data.get("session_config", {}),
+            "conversation_history":  state_data.get("conversation_history", []),
+            "per_turn_feedback_log": state_data.get("per_turn_feedback_log", []),
+            "final_summary":         state_data.get("final_summary"),
+            "session_stats":         state_data.get("session_stats", {}),
+        }
+        async with _get_session() as s:
+            await s.execute(
+                update(InterviewSession)
+                .where(InterviewSession.id == uuid.UUID(session_id))
+                .values(metadata_=meta, status=state_data.get("status", "active"),
+                        updated_at=datetime.utcnow())
+            )
+            await s.commit()
+        return True
 
-    # === Speech Task Methods ===
+    # ── Speech tasks ──────────────────────────────────────────────────────
 
     async def create_speech_task(self, session_id: str, task_type: str) -> str:
-        """
-        Create a new speech processing task.
-        
-        Args:
-            session_id: The session ID this task belongs to
-            task_type: Type of task ('stt_batch', 'tts', 'stt_stream')
-            
-        Returns:
-            str: The created task ID
-        """
-        try:
-            task_data = {
-                "session_id": session_id,
-                "task_type": task_type,
-                "status": "processing",
-                "progress_data": {},
-                "result_data": None,
-                "error_message": None
-            }
-            
-            result = self.supabase.table("speech_tasks").insert(task_data).execute()
-            
-            if result.data and len(result.data) > 0:
-                task_id = result.data[0]["task_id"]
-                logger.info(f"Created speech task: {task_id} for session: {session_id}")
-                return str(task_id)
-            else:
-                raise Exception("Failed to create speech task - no data returned")
-                
-        except Exception as e:
-            logger.error(f"Error creating speech task: {e}")
-            raise
+        from backend.models.core import SpeechTask
+        task_id = str(uuid.uuid4())
+        # skip DB write for anonymous/non-UUID session (no FK to satisfy)
+        if not _is_valid_uuid(session_id):
+            return task_id
+        async with _get_session() as s:
+            s.add(SpeechTask(
+                id=uuid.UUID(task_id),
+                session_id=uuid.UUID(session_id),
+                task_type=task_type,
+                status="processing",
+                metadata_={},
+            ))
+            await s.commit()
+        return task_id
 
-    async def update_speech_task(self, task_id: str, status: str, 
-                               progress_data: Optional[Dict] = None, 
-                               result_data: Optional[Dict] = None,
-                               error_message: Optional[str] = None) -> bool:
-        """
-        Update speech task progress and results.
-        
-        Args:
-            task_id: The task ID to update
-            status: New status ('processing', 'completed', 'error')
-            progress_data: Optional progress information
-            result_data: Optional result data
-            error_message: Optional error message
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            update_data = {
-                "status": status,
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            
-            if progress_data is not None:
-                update_data["progress_data"] = progress_data
-            if result_data is not None:
-                update_data["result_data"] = result_data
-            if error_message is not None:
-                update_data["error_message"] = error_message
-            
-            result = self.supabase.table("speech_tasks").update(update_data).eq("task_id", task_id).execute()
-            
-            if result.data:
-                logger.debug(f"Updated speech task: {task_id}")
-                return True
-            else:
-                logger.error(f"Failed to update speech task: {task_id}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error updating speech task {task_id}: {e}")
+    async def update_speech_task(self, task_id: str, status: str,
+                                 progress_data: Optional[Dict] = None,
+                                 result_data: Optional[Dict] = None,
+                                 error_message: Optional[str] = None) -> bool:
+        if not _is_valid_uuid(task_id):
             return False
+        from backend.models.core import SpeechTask
+        async with _get_session() as s:
+            row = await s.get(SpeechTask, uuid.UUID(task_id))
+            if not row:
+                return False
+            row.status = status
+            row.error_message = error_message
+            meta = row.metadata_ or {}
+            if progress_data is not None:
+                meta["progress_data"] = progress_data
+            if result_data is not None:
+                meta["result_data"] = result_data
+            row.metadata_ = meta
+            if status == "completed":
+                row.completed_at = datetime.utcnow()
+            await s.commit()
+        return True
 
     async def get_speech_task(self, task_id: str) -> Optional[Dict]:
-        """
-        Get speech task by ID.
-        
-        Args:
-            task_id: The task ID to retrieve
-            
-        Returns:
-            Optional[Dict]: Task data if found, None otherwise
-        """
-        try:
-            result = self.supabase.table("speech_tasks").select("*").eq("task_id", task_id).execute()
-            
-            if result.data and len(result.data) > 0:
-                return result.data[0]
-            else:
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error getting speech task {task_id}: {e}")
+        if not _is_valid_uuid(task_id):
             return None
-
-    async def cleanup_completed_tasks(self, older_than_hours: int = 24) -> int:
-        """
-        Clean up completed speech tasks older than specified hours.
-        
-        Args:
-            older_than_hours: Remove tasks completed more than this many hours ago
-            
-        Returns:
-            int: Number of tasks cleaned up
-        """
-        try:
-            from datetime import timedelta
-            cutoff_time = datetime.utcnow() - timedelta(hours=older_than_hours)
-            
-            result = self.supabase.table("speech_tasks").delete().in_("status", ["completed", "error"]).lt("updated_at", cutoff_time.isoformat()).execute()
-            
-            count = len(result.data) if result.data else 0
-            if count > 0:
-                logger.info(f"Cleaned up {count} completed speech tasks")
-            
-            return count
-            
-        except Exception as e:
-            logger.error(f"Error cleaning up tasks: {e}")
-            return 0
+        from backend.models.core import SpeechTask
+        async with _get_session() as s:
+            row = await s.get(SpeechTask, uuid.UUID(task_id))
+        if not row:
+            return None
+        meta = row.metadata_ or {}
+        return {
+            "task_id": str(row.id),
+            "session_id": str(row.session_id),
+            "task_type": row.task_type,
+            "status": row.status,
+            "progress_data": meta.get("progress_data"),
+            "result_data": meta.get("result_data"),
+            "error_message": row.error_message,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.completed_at.isoformat() if row.completed_at else None,
+        }
 
     async def get_user_sessions(self, user_id: str, limit: int = 50) -> List[Dict]:
-        """
-        Get sessions for a specific user.
-        
-        Args:
-            user_id: The user ID
-            limit: Maximum number of sessions to return
-            
-        Returns:
-            List[Dict]: List of session data
-        """
-        try:
-            result = self.supabase.table("interview_sessions").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
-            
-            return result.data if result.data else []
-            
-        except Exception as e:
-            logger.error(f"Error getting user sessions for {user_id}: {e}")
-            return [] 
+        if not _is_valid_uuid(user_id):
+            return []
+        from backend.models.core import InterviewSession
+        async with _get_session() as s:
+            rows = (await s.execute(
+                select(InterviewSession)
+                .where(InterviewSession.user_id == uuid.UUID(user_id))
+                .order_by(InterviewSession.created_at.desc())
+                .limit(limit)
+            )).scalars().all()
+        return [{"session_id": str(r.id), "status": r.status,
+                 "created_at": r.created_at.isoformat() if r.created_at else None}
+                for r in rows]
+
+    async def cleanup_completed_tasks(self, older_than_hours: int = 24) -> int:
+        from backend.models.core import SpeechTask
+        cutoff = datetime.utcnow() - timedelta(hours=older_than_hours)
+        async with _get_session() as s:
+            result = await s.execute(
+                delete(SpeechTask)
+                .where(SpeechTask.status.in_(["completed", "failed"]))
+                .where(SpeechTask.completed_at < cutoff)
+            )
+            await s.commit()
+        return result.rowcount or 0

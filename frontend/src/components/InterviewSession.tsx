@@ -63,6 +63,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
     audioPlaying,
     startVoiceSession,
     finishAnswer,
+    unlockAudio,
   } = useVoiceFirstInterview(
     { messages, isLoading, state: 'interviewing', selectedVoice, sessionId, disableAutoTTS: showInstructions },
     onSendMessage,
@@ -76,7 +77,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== 'Space') return;
+      if (e.code !== 'Tab') return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       e.preventDefault();
@@ -86,14 +87,17 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [finishAnswer, isListening, turnState]);
 
-  // Auto-enable voice on mount
+  // Auto-enable voice on mount + pre-warm voice connection during instructions
   useEffect(() => {
     if (!defaultVoiceSetRef.current) {
       setSelectedVoice('enabled');
       onVoiceSelect('enabled');
       defaultVoiceSetRef.current = true;
+      // Pre-warm: start WebSocket + mic while user reads instructions.
+      // Component mounts immediately after "Start Interview Practice" click (valid gesture).
+      startVoiceSession();
     }
-  }, [onVoiceSelect]);
+  }, [onVoiceSelect, startVoiceSession]);
 
   // Countdown timer — only starts after instructions are dismissed
   const totalSeconds = interviewDurationMinutes * 60;
@@ -116,7 +120,9 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
   const handleInstructionsDismiss = () => {
     setShowInstructions(false);
     setSessionStartTime(Date.now());
-    // Start persistent voice session on user gesture (required for AudioContext unlock)
+    // Unlock AudioContext on this gesture (browser requires explicit user gesture to play audio)
+    unlockAudio();
+    // Ensure voice is running (guard in hook prevents double-start)
     startVoiceSession();
   };
 
@@ -152,7 +158,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
       </div>
 
       {/* ── Chat Stream ── */}
-      <div className="fixed inset-0 flex flex-col justify-end items-center z-10" style={{ padding: '64px 0 220px 0' }}>
+      <div className="fixed inset-0 flex flex-col justify-end items-center z-10" style={{ padding: '64px 0 150px 0' }}>
         <CockpitChatStream
           messages={messages}
           turnState={turnState}
@@ -204,7 +210,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
           <button
             onClick={finishAnswer}
             disabled={turnState === 'ai'}
-            title="Finish your answer (Space)"
+            title="Finish your answer (Tab)"
             className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold shadow-lg transition-all duration-200 ${
               turnState === 'ai'
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
@@ -215,7 +221,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
           >
             <CheckCircle size={16} />
             Finish Answer
-            <span className="opacity-50 text-[11px] font-normal ml-0.5">Space</span>
+            <span className="opacity-50 text-[11px] font-normal ml-0.5">Tab</span>
           </button>
         </div>
       )}

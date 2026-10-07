@@ -35,26 +35,34 @@ _DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 _DEEPGRAM_VOICE = os.getenv("DEEPGRAM_VOICE", "aura-2-asteria-en")
 
 async def deepgram_tts(text: str) -> bytes:
-    """Raw 16kHz Linear PCM via Deepgram TTS — drop-in replacement for Polly."""
+    """Raw 16kHz Linear PCM via Deepgram TTS (buffered, kept for compatibility)."""
+    chunks = []
+    async for chunk in deepgram_tts_stream(text):
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+async def deepgram_tts_stream(text: str):
+    """Stream 16kHz Linear PCM from Deepgram TTS — yields bytes as they arrive."""
     if not text.strip():
-        return b""
+        return
     endpoint = (
         "https://api.deepgram.com/v2/speak"
         if _DEEPGRAM_VOICE.startswith("flux-")
         else "https://api.deepgram.com/v1/speak"
     )
-    async with httpx.AsyncClient() as client:
-        r = await client.post(
-            endpoint,
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        async with client.stream(
+            "POST", endpoint,
             params={"model": _DEEPGRAM_VOICE, "encoding": "linear16",
                     "sample_rate": "16000", "container": "none"},
             headers={"Authorization": f"Token {_DEEPGRAM_API_KEY}",
                      "Content-Type": "application/json"},
             json={"text": text},
-            timeout=30.0,
-        )
-        r.raise_for_status()
-        return r.content
+        ) as r:
+            r.raise_for_status()
+            async for chunk in r.aiter_bytes(chunk_size=4096):
+                if chunk:
+                    yield chunk
 
 try:
     from deepgram import DeepgramClient, LiveOptions
@@ -506,12 +514,12 @@ def create_speech_api(app):
 
         pending_transcript = [""]  # mutable container so closures can write
 
-        def on_open(self_p, open_event, **kw):
+        def on_open(self_p, open=None, **kw):
             loop.call_soon_threadsafe(ws_send_queue.put_nowait, {
                 "type": "connected", "engine": "deepgram+polly", "session_id": session_id or ""
             })
 
-        def on_transcript(self_p, result, **kw):
+        def on_transcript(self_p, result=None, **kw):
             try:
                 alt = result.channel.alternatives[0]
                 text = alt.transcript
@@ -535,14 +543,14 @@ def create_speech_api(app):
             except Exception as e:
                 logger.error(f"Deepgram transcript handler error: {e}")
 
-        def on_utterance_end(self_p, utt_end, **kw):
+        def on_utterance_end(self_p, utterance_end=None, **kw):
             if pending_transcript[0]:
                 loop.call_soon_threadsafe(
                     transcript_queue.put_nowait, pending_transcript[0]
                 )
                 pending_transcript[0] = ""
 
-        def on_error(self_p, error, **kw):
+        def on_error(self_p, error=None, **kw):
             logger.error(f"Deepgram error: {error}")
             loop.call_soon_threadsafe(ws_send_queue.put_nowait, {
                 "type": "error", "error": str(error)
@@ -647,12 +655,10 @@ def create_speech_api(app):
                 await _speak(ai_text)
 
         async def _speak(text: str):
-            """Synthesize text with Deepgram TTS and stream PCM chunks to browser."""
+            """Stream PCM chunks from Deepgram TTS to browser as they arrive."""
             try:
-                audio_bytes = await deepgram_tts(text)
-                CHUNK = 8192
-                for i in range(0, len(audio_bytes), CHUNK):
-                    chunk_b64 = base64.b64encode(audio_bytes[i:i + CHUNK]).decode()
+                async for chunk_bytes in deepgram_tts_stream(text):
+                    chunk_b64 = base64.b64encode(chunk_bytes).decode()
                     await ws_send_queue.put({"type": "audio", "data": chunk_b64})
                 await ws_send_queue.put({"type": "turn_ended", "stop_reason": "END_TURN"})
             except Exception as e:
@@ -672,13 +678,20 @@ def create_speech_api(app):
                     elif "text" in msg and msg["text"]:
                         try:
                             parsed = json.loads(msg["text"])
-                            if parsed.get("type") == "client_turn_complete":
-                                # Manual "Finish Answer" — flush any pending transcript
+                            msg_type = parsed.get("type")
+                            if msg_type == "client_turn_complete":
+                                # Tab pressed — flush any pending transcript to LLM
                                 if pending_transcript[0]:
                                     loop.call_soon_threadsafe(
                                         transcript_queue.put_nowait, pending_transcript[0]
                                     )
                                     pending_transcript[0] = ""
+                            elif msg_type == "KeepAlive":
+                                # Forward keepalive to Deepgram to prevent 1011 timeout
+                                try:
+                                    dg_conn.send(json.dumps({"type": "KeepAlive"}))
+                                except Exception:
+                                    pass
                         except json.JSONDecodeError:
                             pass
             except (WebSocketDisconnect, RuntimeError):
@@ -707,15 +720,6 @@ def create_speech_api(app):
     ):
         """Primary interview voice stream: Deepgram STT → LLM → Polly TTS."""
         await _handle_deepgram_polly_stream(websocket, token, session_id)
-
-    @router.websocket("/api/voice/nova-sonic/stream")
-    async def nova_sonic_stream_endpoint(
-        websocket: WebSocket,
-        token: Optional[str] = Query(None, description="Optional JWT token for authentication"),
-        session_id: Optional[str] = Query(None, description="Optional session ID for linking speech tasks")
-    ):
-        """Dedicated Amazon Nova 2 Sonic bidirectional voice streaming endpoint."""
-        await _handle_nova_sonic_stream(websocket, token, session_id)
 
     @router.post("/api/text-to-speech")
     async def text_to_speech(

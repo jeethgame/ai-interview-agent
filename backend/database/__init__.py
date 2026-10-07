@@ -13,7 +13,12 @@ from sqlalchemy.orm import declarative_base
 _db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./project08.db")
 _qb_url = os.getenv("QUESTION_BANK_DATABASE_URL", "")
 
-_engine = create_async_engine(_db_url, echo=False, future=True)
+_is_postgres = _db_url.startswith("postgresql")
+_engine = create_async_engine(
+    _db_url, echo=False, future=True,
+    pool_pre_ping=True,
+    **({"pool_size": 5, "max_overflow": 10} if _is_postgres else {}),
+)
 _AsyncSessionLocal = async_sessionmaker(
     bind=_engine, class_=AsyncSession,
     expire_on_commit=False, autocommit=False, autoflush=False,
@@ -48,5 +53,42 @@ async def get_question_bank_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # candidate_scorecards has no ORM model — create it explicitly
+        from sqlalchemy import text
+        if _is_postgres:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS candidate_scorecards (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+                    session_id UUID NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+                    overall_score DOUBLE PRECISION,
+                    dimension_scores JSONB,
+                    readiness_score DOUBLE PRECISION,
+                    rubric_band VARCHAR(50),
+                    role VARCHAR(255),
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(user_id, session_id)
+                )
+            """))
+        else:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS candidate_scorecards (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+                    session_id TEXT NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+                    overall_score REAL,
+                    dimension_scores TEXT,
+                    readiness_score REAL,
+                    rubric_band TEXT,
+                    role TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, session_id)
+                )
+            """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_scorecard_user ON candidate_scorecards(user_id)"
+        ))
 
 __all__ = ["DatabaseManager", "get_db", "get_question_bank_db", "init_db", "Base"]

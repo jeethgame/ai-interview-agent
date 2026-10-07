@@ -51,9 +51,9 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
 
   return (
     <div
-      className="flex flex-col gap-4 w-full max-w-lg mx-auto overflow-y-auto px-4 py-4 scroll-smooth"
+      className="flex flex-col gap-4 w-full max-w-2xl mx-auto overflow-y-auto px-6 py-4 scroll-smooth"
       style={{
-        maxHeight: 'calc(100vh - 260px)',
+        maxHeight: 'calc(100vh - 200px)',
         maskImage: 'linear-gradient(to bottom, transparent 0%, black 8%, black 100%)',
         WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 8%, black 100%)',
       }}

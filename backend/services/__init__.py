@@ -85,8 +85,9 @@ async def initialize_services() -> None:
 
     try:
         use_mock_auth = os.environ.get("USE_MOCK_AUTH", "false").lower() == "true"
+        use_mock_db = os.environ.get("USE_MOCK_DB", str(use_mock_auth)).lower() == "true"
 
-        if use_mock_auth:
+        if use_mock_db:
             logger.info("Initializing with MockDatabaseManager for development")
             _database_manager = MockDatabaseManager()
         else:
