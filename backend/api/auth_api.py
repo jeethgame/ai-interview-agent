@@ -130,10 +130,12 @@ def _verify_mock_token(token: str) -> dict:
     return jwt.decode(token, _MOCK_SECRET, algorithms=["HS256"])
 
 async def _decode_token(token: str) -> dict:
-    if _cognito_available():
-        return await _verify_cognito_token(token)
+    # Mock auth takes priority — Cognito IDs may be present in env for config
+    # purposes but should not override mock mode during local dev.
     if USE_MOCK_AUTH:
         return _verify_mock_token(token)
+    if _cognito_available():
+        return await _verify_cognito_token(token)
     raise HTTPException(status_code=500, detail="Auth not configured")
 
 # Public alias for modules importing token decode logic
