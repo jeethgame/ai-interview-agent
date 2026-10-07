@@ -31,6 +31,7 @@ import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 try:
     from jwt.algorithms import RSAAlgorithm
 except ImportError:
@@ -198,6 +199,7 @@ async def get_current_user(
         )
 
 import fastapi.params
+
 
 class RoleChecker(fastapi.params.Depends):
     """

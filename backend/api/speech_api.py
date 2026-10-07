@@ -37,7 +37,12 @@ from pydantic import BaseModel, Field
 _env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 load_dotenv(dotenv_path=_env_path) if os.path.exists(_env_path) else load_dotenv()
 
-from backend.api.auth_api import get_current_user, require_role, decode_token, _extract_role_from_payload
+from backend.api.auth_api import (
+    _extract_role_from_payload,
+    decode_token,
+    get_current_user,
+    require_role,
+)
 from backend.database.db_manager import DatabaseManager
 from backend.services.rate_limiting import get_rate_limiter
 
