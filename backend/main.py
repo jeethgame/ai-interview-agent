@@ -28,7 +28,6 @@ if _parent_dir not in sys.path:
 env_path = os.path.join(_current_dir, ".env")
 load_dotenv(dotenv_path=env_path) if os.path.exists(env_path) else load_dotenv()
 
-from backend.api.code_execution_api import create_code_execution_api
 # Pydantic imports
 from pydantic import BaseModel, Field
 
