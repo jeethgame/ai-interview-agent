@@ -63,7 +63,6 @@ from backend.api.file_processing_api import create_file_processing_api
 from backend.api.auth_api import create_auth_api
 from backend.api.blueprint_api import create_blueprint_api
 from backend.api.interview_ws import router as interview_ws_router
-from backend.api.voxie_agent_api import router as voxie_router
 from backend.api.institutional_api import create_institutional_api
 from backend.middleware import SessionSavingMiddleware
 
@@ -241,8 +240,6 @@ logger.info("Blueprint API routes registered")
 app.include_router(interview_ws_router)
 logger.info("Interview WebSocket route registered (/ws/interview/{session_id})")
 
-app.include_router(voxie_router, prefix="/api/voxie", tags=["voxie"])
-logger.info("Voxie agent HTTP bridge registered (/api/voxie/*)")
 
 create_institutional_api(app)
 
@@ -291,7 +288,7 @@ async def health_check():
         try:
             from backend.services import get_database_manager
             db_mgr = get_database_manager()
-            if hasattr(db_mgr, 'supabase'):
+            if hasattr(db_mgr, 'rds') or hasattr(db_mgr, 'supabase'):
                 db_status = "connected"
             elif hasattr(db_mgr, 'sessions'):
                 db_status = "mock"
@@ -321,7 +318,7 @@ async def health_check():
                 "database": db_status,
                 "llm_service": llm_status,
                 "event_bus": "running",
-                "nova_sonic_engine": nova_status
+                "voice_engine": nova_status
             }
         }
         

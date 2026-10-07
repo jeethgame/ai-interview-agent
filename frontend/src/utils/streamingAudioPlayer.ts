@@ -1,11 +1,11 @@
-// @deprecated — replaced by native WebRTC browser audio playback via Voxie. Remove in follow-up PR.
 /**
- * Web Audio API PCM streaming player for Gemini Live / Nova Sonic.
- * Plays 24kHz 16-bit linear PCM chunks seamlessly.
+ * Web Audio API PCM streaming player.
+ * Plays 16kHz 16-bit linear PCM chunks from Deepgram TTS seamlessly.
  */
 
 export class StreamingAudioPlayer {
   public readonly audioContext: AudioContext;
+  private readonly gainNode: GainNode;
   private readonly analyser: AnalyserNode;
   private readonly analyserData: Uint8Array;
   private nextPlayTime: number = 0;
@@ -20,9 +20,12 @@ export class StreamingAudioPlayer {
     this.onPlaybackStateChange = onPlaybackStateChange;
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     this.audioContext = new AudioCtx();
+    this.gainNode = this.audioContext.createGain();
+    this.gainNode.gain.value = 2.5; // boost Deepgram TTS which outputs at low amplitude
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 256;
     this.analyserData = new Uint8Array(this.analyser.frequencyBinCount);
+    this.gainNode.connect(this.analyser);
     this.analyser.connect(this.audioContext.destination);
   }
 
@@ -97,7 +100,7 @@ export class StreamingAudioPlayer {
 
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(this.analyser); // analyser → destination (for getLevel())
+      source.connect(this.gainNode); // gain → analyser → destination
 
       const now = this.audioContext.currentTime;
       // If nextPlayTime is 0 (after stop/reset) or stale, start from now + small buffer

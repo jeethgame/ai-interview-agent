@@ -80,6 +80,7 @@ export class StreamingSpeechRecognition {
   private inputSource: MediaStreamAudioSourceNode | null = null;
   private options: StreamingSpeechOptions;
   private isMuted: boolean = false;
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: StreamingSpeechOptions) {
     this.options = options;
@@ -94,6 +95,21 @@ export class StreamingSpeechRecognition {
 
   setMuted(muted: boolean): void {
     this.isMuted = muted;
+    if (muted) {
+      // Send Deepgram KeepAlive every 8s while muted — prevents 1011 timeout
+      if (!this.keepAliveTimer) {
+        this.keepAliveTimer = setInterval(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'KeepAlive' }));
+          }
+        }, 8000);
+      }
+    } else {
+      if (this.keepAliveTimer) {
+        clearInterval(this.keepAliveTimer);
+        this.keepAliveTimer = null;
+      }
+    }
   }
 
   sendTranscript(text: string): void {
@@ -103,9 +119,6 @@ export class StreamingSpeechRecognition {
   }
 
   sendEndOfTurn(): void {
-    const now = Date.now();
-    if (now - this.vadTriggeredAt < 3000) return;  // shared debounce with VAD
-    this.vadTriggeredAt = now;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'client_turn_complete' }));
     }
@@ -135,6 +148,7 @@ export class StreamingSpeechRecognition {
   }
 
   stop(): void {
+    if (this.keepAliveTimer) { clearInterval(this.keepAliveTimer); this.keepAliveTimer = null; }
     // Stop Web Audio processing
     if (this.processor) {
       this.processor.disconnect();
@@ -321,34 +335,21 @@ export class StreamingSpeechRecognition {
           console.log(`🎤 Audio to AI (RMS: ${rms.toFixed(3)})`);
         }
 
-        // Client VAD: detect speech/silence and signal Gemini when user finishes
+        // VAD — visual indicator only (no auto-send; Tab key controls turn end)
         const boostedRms = rms * this.MIC_GAIN;
-        const wasSpeaking = this.vadSpeechFrames > 0 && this.vadSilenceFrames === 0;
         if (boostedRms >= this.VAD_SPEECH_THRESHOLD) {
+          if (this.vadSpeechFrames === 0) this.options.onUserSpeaking?.(true);
           this.vadSpeechFrames++;
           this.vadSilenceFrames = 0;
-          if (!wasSpeaking && this.vadSpeechFrames === 1) {
-            this.options.onUserSpeaking?.(true);
-          }
-        } else if (this.vadSpeechFrames >= this.VAD_MIN_SPEECH_FRAMES) {
-          this.vadSilenceFrames++;
-          if (this.vadSilenceFrames === 1) {
-            this.options.onUserSpeaking?.(false);
-          }
-          if (this.vadSilenceFrames >= this.VAD_SILENCE_FRAMES) {
-            const now = Date.now();
-            if (now - this.vadTriggeredAt > 3000) {
-              this.vadTriggeredAt = now;
-              console.log(`🗣️ VAD: end-of-speech (${this.vadSpeechFrames} frames) → signalling Gemini`);
-              this.ws.send(JSON.stringify({ type: 'client_turn_complete' }));
-            }
-            this.vadSpeechFrames = 0;
-            this.vadSilenceFrames = 0;
-          }
         } else {
-          if (this.vadSpeechFrames > 0) this.options.onUserSpeaking?.(false);
-          this.vadSpeechFrames = 0;
-          this.vadSilenceFrames = 0;
+          if (this.vadSpeechFrames > 0) {
+            this.vadSilenceFrames++;
+            if (this.vadSilenceFrames > 10) {
+              this.options.onUserSpeaking?.(false);
+              this.vadSpeechFrames = 0;
+              this.vadSilenceFrames = 0;
+            }
+          }
         }
       };
       

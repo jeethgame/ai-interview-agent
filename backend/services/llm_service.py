@@ -45,8 +45,6 @@ class ChatOpenAICompatible(BaseChatModel):
         if not url.rstrip("/").endswith("/v1"):
             url = url.rstrip("/") + "/v1"
 
-        client = openai.OpenAI(api_key=self.api_key, base_url=url)
-
         oai_messages = []
         for m in messages:
             if m.type == "system":
@@ -58,22 +56,29 @@ class ChatOpenAICompatible(BaseChatModel):
             else:
                 oai_messages.append({"role": "user", "content": m.content})
 
-        response = client.chat.completions.create(
-            model=self.model_name,
-            messages=oai_messages,
-            temperature=self.temperature,
-            stop=stop or None,
-        )
+        keys = [self.api_key]
+        backup = os.environ.get("GROQ_API_KEY_2")
+        if backup:
+            keys.append(backup)
 
-        content = response.choices[0].message.content or ""
-        return ChatResult(
-            generations=[
-                ChatGeneration(
-                    message=AIMessage(content=content),
-                    text=content,
+        last_err: Exception = RuntimeError("No API keys configured")
+        for key in keys:
+            try:
+                client = openai.OpenAI(api_key=key, base_url=url)
+                response = client.chat.completions.create(
+                    model=self.model_name,
+                    messages=oai_messages,
+                    temperature=self.temperature,
+                    stop=stop or None,
                 )
-            ]
-        )
+                content = response.choices[0].message.content or ""
+                return ChatResult(generations=[ChatGeneration(
+                    message=AIMessage(content=content), text=content
+                )])
+            except openai.RateLimitError as e:
+                last_err = e
+                continue  # try next key
+        raise last_err
 
 
 class LLMService:

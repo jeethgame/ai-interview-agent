@@ -79,3 +79,21 @@ start.sh
 # Graphify knowledge graph
 graphify-out/
 graph.json
+ARCHITECTURE_GRAPH.md
+
+# Learning / planning docs (not code)
+LEARN_AWS_DEPLOYMENT.md
+EXPLAIN_WORKFLOW_PROMPT.md
+EXTERNAL_TOOL_GENERATION_PROMPTS.md
+PRESENTATION_PLAN_AND_SPEAKER_GUIDE.md
+*.pptx
+
+# Temp infra / log dumps
+ecs_logs.json
+task_def_new.json
+task_def_raw.json
+buildspec.yml
+
+# Stray root-level package files
+/package.json
+/package-lock.json
