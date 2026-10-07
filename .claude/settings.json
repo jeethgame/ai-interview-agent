@@ -8,30 +8,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c \"test -f graphify-out/graph.json || C:/Users/praje/AppData/Local/Programs/Python/Python310/Scripts/graphify.EXE build .\"",
+            "command": "bash -c \"test -f graphify-out/graph.json || C:/Users/praje/AppData/Local/Programs/Python/Python313/Scripts/graphify.exe build .\"",
             "timeout": 120
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-{
-        "matcher": "Bash|Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "C:/Users/praje/AppData/Local/Programs/Python/Python310/Scripts/graphify.EXE hook-guard search",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "C:/Users/praje/AppData/Local/Programs/Python/Python310/Scripts/graphify.EXE hook-guard read",
-            "timeout": 10
           }
         ]
       }

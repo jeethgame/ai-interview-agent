@@ -196,7 +196,7 @@ class InterviewQuestion(Base):
     topic: Mapped[str | None] = mapped_column(String(255))
     difficulty: Mapped[str | None] = mapped_column(String(50))
     source: Mapped[str | None] = mapped_column(String(100))              # agent|blueprint|followup_ladder
-    parent_question_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_questions.id", ondelete="SET NULL"))
+    parent_question_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_session_questions.id", ondelete="SET NULL"))
     asked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)   # agent action, competency, probe category
