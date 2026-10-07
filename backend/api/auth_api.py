@@ -198,7 +198,7 @@ async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
             await db.execute(text(
                 "INSERT INTO platform_users (id, email, name, role, auth_provider, data_consent_given, created_at, updated_at) "
                 "VALUES (:id, :email, :name, :role, 'mock', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
-                "ON CONFLICT (email) DO UPDATE SET name = :name, role = :role, updated_at = CURRENT_TIMESTAMP"
+                "ON CONFLICT (id) DO UPDATE SET name = :name, role = :role, email = :email, updated_at = CURRENT_TIMESTAMP"
             ), {"id": user_id, "email": email, "name": name, "role": role})
             await db.commit()
             break
