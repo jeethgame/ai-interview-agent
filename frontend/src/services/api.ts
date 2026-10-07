@@ -95,21 +95,6 @@ export class StreamingSpeechRecognition {
 
   setMuted(muted: boolean): void {
     this.isMuted = muted;
-    if (muted) {
-      // Send Deepgram KeepAlive every 8s while muted — prevents 1011 timeout
-      if (!this.keepAliveTimer) {
-        this.keepAliveTimer = setInterval(() => {
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'KeepAlive' }));
-          }
-        }, 8000);
-      }
-    } else {
-      if (this.keepAliveTimer) {
-        clearInterval(this.keepAliveTimer);
-        this.keepAliveTimer = null;
-      }
-    }
   }
 
   sendTranscript(text: string): void {
@@ -131,7 +116,7 @@ export class StreamingSpeechRecognition {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: false  // manual 4× gain applied in resampleTo16kHz; AGC fights it and clips
+          autoGainControl: true
         }
       });
       
@@ -186,6 +171,12 @@ export class StreamingSpeechRecognition {
       this.ws.onopen = () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        // Keep Deepgram STT alive — send KeepAlive every 5s regardless of mic state
+        this.keepAliveTimer = setInterval(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'KeepAlive' }));
+          }
+        }, 5000);
         resolve();
       };
       

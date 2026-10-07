@@ -38,18 +38,15 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
   onExtendSession,
   onSessionTimeout,
 }) => {
-  const [showInstructions, setShowInstructions] = useState(true);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [phase, setPhase] = useState<'instructions' | 'countdown' | 'live'>('instructions');
+  const [countdown, setCountdown] = useState(3);
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
-  // Timer starts null and is set when the user dismisses the instructions modal,
-  // so the countdown doesn't run while they're reading instructions.
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [devInputOpen, setDevInputOpen] = useState(false);
   const [devText, setDevText] = useState('');
-  const defaultVoiceSetRef = useRef(false);
   const autoEndedRef = useRef(false);
 
   const {
@@ -59,50 +56,38 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
     isUserSpeaking,
     isListening,
     isProcessing,
-    isDisabled,
     turnState,
     audioPlaying,
     startVoiceSession,
     finishAnswer,
-    unlockAudio,
   } = useVoiceFirstInterview(
-    { messages, isLoading, state: 'interviewing', selectedVoice, sessionId, disableAutoTTS: showInstructions },
+    { messages, isLoading, state: 'interviewing', selectedVoice, sessionId },
     onSendMessage,
     onEndInterview,
   );
 
+  // Clock tick
   useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
 
+  // Tab or Space → finish answer
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== 'Tab') return;
+      if (e.code !== 'Tab' && e.code !== 'Space') return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (isListening && turnState !== 'ai') {
-        e.preventDefault(); // only block Tab when it actually triggers finishAnswer
+      if (phase === 'live' && isListening && turnState !== 'ai') {
+        e.preventDefault();
         finishAnswer();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [finishAnswer, isListening, turnState]);
+  }, [finishAnswer, isListening, turnState, phase]);
 
-  // Auto-enable voice on mount + pre-warm during instructions
-  useEffect(() => {
-    console.log('[INTERVIEW-DEBUG] useEffect fired, defaultVoiceSet:', defaultVoiceSetRef.current, 'sessionId:', sessionId);
-    if (!defaultVoiceSetRef.current) {
-      setSelectedVoice('enabled');
-      onVoiceSelect('enabled');
-      defaultVoiceSetRef.current = true;
-      console.log('[INTERVIEW-DEBUG] calling startVoiceSession from useEffect');
-      startVoiceSession();
-    }
-  }, [onVoiceSelect, startVoiceSession]);
-
-  // Countdown timer — only starts after instructions are dismissed
+  // Session timer
   const totalSeconds = interviewDurationMinutes * 60;
   const elapsed = sessionStartTime ? Math.floor((currentTime - sessionStartTime) / 1000) : 0;
   const remaining = Math.max(0, totalSeconds - elapsed);
@@ -111,29 +96,29 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
   const isLowTime = remaining < 120 && remaining > 0 && sessionStartTime !== null;
   const isExpired = remaining === 0 && sessionStartTime !== null;
 
-  // Auto-end interview and transition to post-interview report when time reaches 00:00
   useEffect(() => {
     if (isExpired && !autoEndedRef.current) {
       autoEndedRef.current = true;
-      console.log('⏰ Time expired (00:00) -> automatically concluding interview');
       onEndInterview();
     }
   }, [isExpired, onEndInterview]);
 
+  // "Understood" button → countdown → voice starts
   const handleInstructionsDismiss = () => {
-    unlockAudio();       // unlocks AudioContext on this gesture — makes pre-warmed audio play
-    startVoiceSession(); // guard prevents double-start; ensures voice is running
-    setCountdown(3);
+    setPhase('countdown');
+    onVoiceSelect('enabled');
+    let t = 3;
+    setCountdown(t);
     const tick = setInterval(() => {
-      setCountdown(prev => {
-        if (prev === null || prev <= 1) {
-          clearInterval(tick);
-          setShowInstructions(false);
-          setSessionStartTime(Date.now());
-          return null;
-        }
-        return prev - 1;
-      });
+      t--;
+      if (t <= 0) {
+        clearInterval(tick);
+        setPhase('live');
+        setSessionStartTime(Date.now());
+        startVoiceSession(); // gesture context: user just clicked "Understood"
+      } else {
+        setCountdown(t);
+      }
     }, 1000);
   };
 
@@ -148,50 +133,95 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
   return (
     <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-white via-white to-[#FEF3C7]/30">
 
-      {/* ── Top Bar ── */}
-      <div className="fixed top-0 left-0 right-0 flex justify-between items-center px-5 sm:px-8 py-3 z-20 bg-white/80 backdrop-blur-lg border-b border-gray-100">
-        <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border text-[13px] font-bold font-mono transition-colors ${
-          isExpired ? 'border-[#DC2626] text-[#DC2626] bg-red-50' :
-          isLowTime ? 'border-[#DC2626] text-[#DC2626] bg-red-50 animate-pulse' :
-          'border-[#EAB308] text-[#92400E] bg-[#FEF3C7]/50'
-        }`}>
-          <Clock size={14} />
-          <span>{mm}:{ss}</span>
+      {/* ── Instructions Modal ── */}
+      {phase === 'instructions' && (
+        <InterviewInstructionsModal isOpen onClose={handleInstructionsDismiss} />
+      )}
+
+      {/* ── Countdown Overlay ── */}
+      {phase === 'countdown' && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
+          <p className="text-white text-lg font-semibold mb-4 tracking-wide">Starting interview in</p>
+          <div className="w-28 h-28 rounded-full border-4 border-[#DC2626] flex items-center justify-center shadow-[0_0_40px_rgba(220,38,38,0.5)]">
+            <span className="text-6xl font-black text-white">{countdown}</span>
+          </div>
+          <p className="text-white/60 text-sm mt-5">Preparing voice session…</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowEndConfirm(true)}
-          className="border-[#DC2626] text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-semibold text-xs rounded-lg px-4"
-        >
-          End Interview
-        </Button>
-      </div>
+      )}
+
+      {/* ── Top Bar ── */}
+      {phase === 'live' && (
+        <div className="fixed top-0 left-0 right-0 flex justify-between items-center px-5 sm:px-8 py-3 z-20 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+          <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border text-[13px] font-bold font-mono transition-colors ${
+            isExpired ? 'border-[#DC2626] text-[#DC2626] bg-red-50' :
+            isLowTime ? 'border-[#DC2626] text-[#DC2626] bg-red-50 animate-pulse' :
+            'border-[#EAB308] text-[#92400E] bg-[#FEF3C7]/50'
+          }`}>
+            <Clock size={14} />
+            <span>{mm}:{ss}</span>
+          </div>
+
+          {/* Turn indicator */}
+          <div className="flex items-center gap-3">
+            {turnState === 'ai' && (
+              <span className="text-xs font-bold text-[#DC2626] uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-pulse" />
+                AI Speaking
+              </span>
+            )}
+            {turnState === 'user' && (
+              <span className="text-xs font-bold text-[#EAB308] uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#EAB308] animate-pulse" />
+                Your Turn
+              </span>
+            )}
+            {turnState === 'idle' && (
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
+                Connecting…
+              </span>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowEndConfirm(true)}
+            className="border-[#DC2626] text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-semibold text-xs rounded-lg px-4"
+          >
+            End Interview
+          </Button>
+        </div>
+      )}
 
       {/* ── Chat Stream ── */}
-      <div className="fixed inset-0 flex flex-col justify-end items-center z-10" style={{ padding: '64px 0 150px 0' }}>
-        <CockpitChatStream
-          messages={messages}
+      {phase === 'live' && (
+        <div className="fixed inset-0 flex flex-col justify-end items-center z-10" style={{ padding: '64px 0 150px 0' }}>
+          <CockpitChatStream
+            messages={messages}
+            turnState={turnState}
+            isListening={isListening}
+            isProcessing={isProcessing}
+            accumulatedTranscript={accumulatedTranscript}
+            aiTextRef={aiTextRef}
+            isUserSpeaking={isUserSpeaking}
+            audioPlaying={audioPlaying}
+          />
+        </div>
+      )}
+
+      {/* ── WebGL Audio Wave ── */}
+      {phase === 'live' && (
+        <CockpitAudioWave
           turnState={turnState}
           isListening={isListening}
           isProcessing={isProcessing}
-          accumulatedTranscript={accumulatedTranscript}
-          aiTextRef={aiTextRef}
-          isUserSpeaking={isUserSpeaking}
-          audioPlaying={audioPlaying}
+          voiceActivity={voiceActivityLevel}
         />
-      </div>
-
-      {/* ── WebGL Audio Wave ── */}
-      <CockpitAudioWave
-        turnState={turnState}
-        isListening={isListening}
-        isProcessing={isProcessing}
-        voiceActivity={voiceActivityLevel}
-      />
+      )}
 
       {/* ── Dev Text Input Bar ── */}
-      {devInputOpen && (
+      {phase === 'live' && devInputOpen && (
         <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-[25] w-full max-w-xl px-4">
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-gray-200 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
             <input
@@ -215,54 +245,53 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
         </div>
       )}
 
-      {/* ── Primary Turn Control ── */}
-      {isListening && (
+      {/* ── Primary Turn Control — only when user's turn ── */}
+      {phase === 'live' && turnState === 'user' && (
         <div className="fixed bottom-[68px] left-1/2 -translate-x-1/2 z-20">
           <button
             onClick={finishAnswer}
-            disabled={turnState === 'ai'}
-            title="Finish your answer (Tab)"
+            title="Finish your answer (Tab / Space)"
             className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold shadow-lg transition-all duration-200 ${
-              turnState === 'ai'
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                : isUserSpeaking
-                  ? 'bg-[#DC2626] text-white ring-2 ring-[#DC2626]/40 animate-pulse shadow-[0_4px_20px_rgba(220,38,38,0.35)]'
-                  : 'bg-[#DC2626] text-white hover:bg-red-700 shadow-[0_4px_16px_rgba(220,38,38,0.25)]'
+              isUserSpeaking
+                ? 'bg-[#DC2626] text-white ring-2 ring-[#DC2626]/40 animate-pulse shadow-[0_4px_20px_rgba(220,38,38,0.35)]'
+                : 'bg-[#DC2626] text-white hover:bg-red-700 shadow-[0_4px_16px_rgba(220,38,38,0.25)]'
             }`}
           >
             <CheckCircle size={16} />
             Finish Answer
-            <span className="opacity-50 text-[11px] font-normal ml-0.5">Tab</span>
+            <span className="opacity-50 text-[11px] font-normal ml-0.5">Tab / Space</span>
           </button>
         </div>
       )}
 
       {/* ── Secondary Control Dock ── */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-2xl bg-white border border-gray-200 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-        <button
-          onClick={() => setTranscriptOpen(!transcriptOpen)}
-          title="Toggle transcript"
-          className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
-            transcriptOpen
-              ? 'bg-[#FEF3C7] text-[#92400E] border border-[#EAB308]'
-              : 'bg-gray-50 text-[#6B7280] hover:bg-gray-100 border border-gray-200'
-          }`}
-        >
-          <MessageSquare size={18} />
-        </button>
+      {phase === 'live' && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-2xl bg-white border border-gray-200 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+          <button
+            onClick={() => setTranscriptOpen(!transcriptOpen)}
+            title="Toggle transcript"
+            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
+              transcriptOpen
+                ? 'bg-[#FEF3C7] text-[#92400E] border border-[#EAB308]'
+                : 'bg-gray-50 text-[#6B7280] hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            <MessageSquare size={18} />
+          </button>
 
-        <button
-          onClick={() => setDevInputOpen(!devInputOpen)}
-          title="Toggle text input"
-          className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
-            devInputOpen
-              ? 'bg-[#DC2626]/10 text-[#DC2626] border border-[#DC2626]/30'
-              : 'bg-gray-50 text-[#6B7280] hover:bg-gray-100 border border-gray-200'
-          }`}
-        >
-          <Keyboard size={18} />
-        </button>
-      </div>
+          <button
+            onClick={() => setDevInputOpen(!devInputOpen)}
+            title="Toggle text input"
+            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
+              devInputOpen
+                ? 'bg-[#DC2626]/10 text-[#DC2626] border border-[#DC2626]/30'
+                : 'bg-gray-50 text-[#6B7280] hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            <Keyboard size={18} />
+          </button>
+        </div>
+      )}
 
       {/* ── Transcript Drawer ── */}
       <TranscriptDrawer
@@ -272,25 +301,6 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
         onSendTextFromTranscript={onSendMessage}
         coachFeedbackStates={coachFeedbackStates}
       />
-
-      {/* ── Instructions Modal ── */}
-      {showInstructions && countdown === null && (
-        <InterviewInstructionsModal
-          isOpen={showInstructions}
-          onClose={handleInstructionsDismiss}
-        />
-      )}
-
-      {/* ── Countdown overlay ── */}
-      {countdown !== null && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
-          <p className="text-white text-lg font-semibold mb-4 tracking-wide">Starting interview in</p>
-          <div className="w-28 h-28 rounded-full border-4 border-[#DC2626] flex items-center justify-center shadow-[0_0_40px_rgba(220,38,38,0.5)]">
-            <span className="text-6xl font-black text-white">{countdown}</span>
-          </div>
-          <p className="text-white/60 text-sm mt-5">Connecting voice session…</p>
-        </div>
-      )}
 
       {/* ── End Confirm Modal ── */}
       {showEndConfirm && (

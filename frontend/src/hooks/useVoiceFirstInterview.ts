@@ -48,6 +48,7 @@ export function useVoiceFirstInterview(
   const speechRef         = useRef<StreamingSpeechRecognition | null>(null);
   const playerRef         = useRef<StreamingAudioPlayer | null>(null);
   const aiTypingRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingAiTextRef  = useRef<string>(''); // stores AI text until DOM element is ready
   const transcriptRef     = useRef<string>(''); // mirror of accumulatedTranscript for safe reads inside callbacks
 
   const stopVoiceSession = useCallback(() => {
@@ -66,7 +67,6 @@ export function useVoiceFirstInterview(
   }, []);
 
   const startVoiceSession = useCallback(async () => {
-    console.log('[VOICE-DEBUG] startVoiceSession called, sessionId:', sessionData.sessionId, 'already started:', !!speechRef.current);
     if (speechRef.current) return;
 
     const player = new StreamingAudioPlayer((playing) => {
@@ -91,28 +91,19 @@ export function useVoiceFirstInterview(
       },
       onTranscript: (text, isFinal, role) => {
         if (role === 'user' && text.trim()) {
-          // Append each final segment; keep prev for interim partials.
           if (isFinal) {
             transcriptRef.current = (transcriptRef.current ? transcriptRef.current + ' ' : '') + text;
             setAccumulatedTranscript(transcriptRef.current);
           }
         }
         if (role === 'assistant' && text.trim()) {
-          // Animate words into aiTextRef as audio plays
-          if (aiTypingRef.current) clearInterval(aiTypingRef.current);
-          if (aiTextRef.current) aiTextRef.current.textContent = '';
-          const words = text.split(' ');
-          let i = 0;
-          aiTypingRef.current = setInterval(() => {
-            if (!aiTextRef.current) return;
-            if (i < words.length) {
-              aiTextRef.current.textContent += (i > 0 ? ' ' : '') + words[i];
-              i++;
-            } else {
-              clearInterval(aiTypingRef.current!);
-              aiTypingRef.current = null;
-            }
-          }, 110); // ~110ms per word ≈ natural speech pace
+          pendingAiTextRef.current = text;
+          startAiTyping(text);
+          // Add AI response to voice messages (displayed in chat after user's message)
+          setVoiceMessages(prev => [...prev, {
+            role: 'assistant', agent: 'interviewer', content: text,
+            timestamp: new Date().toISOString()
+          }]);
         }
       },
       onAudioChunk: (b64) => {
@@ -139,11 +130,8 @@ export function useVoiceFirstInterview(
     speechRef.current = speech;
 
     try {
-      console.log('[VOICE-DEBUG] calling speech.start()...');
       await speech.start();
-      console.log('[VOICE-DEBUG] speech.start() succeeded');
     } catch (e: any) {
-      console.error('[VOICE-DEBUG] speech.start() FAILED:', e);
       // Release resources — getUserMedia may already have acquired mic tracks
       speech.stop();
       player.close();
@@ -157,16 +145,51 @@ export function useVoiceFirstInterview(
     }
   }, [sessionData.sessionId, onSendMessage, onEndInterview, toast]);
 
+  const startAiTyping = useCallback((text: string) => {
+    if (aiTypingRef.current) clearInterval(aiTypingRef.current);
+    if (!aiTextRef.current) return; // DOM not mounted yet — useEffect below handles retry
+    aiTextRef.current.textContent = '';
+    const words = text.split(' ');
+    let i = 0;
+    aiTypingRef.current = setInterval(() => {
+      if (!aiTextRef.current) return;
+      if (i < words.length) {
+        aiTextRef.current.textContent += (i > 0 ? ' ' : '') + words[i];
+        i++;
+      } else {
+        clearInterval(aiTypingRef.current!);
+        aiTypingRef.current = null;
+      }
+    }, 110);
+  }, []);
+
+  // Retry AI text animation when turnState becomes 'ai' (DOM element now mounted)
+  useEffect(() => {
+    if (turnState === 'ai' && pendingAiTextRef.current && !aiTypingRef.current) {
+      startAiTyping(pendingAiTextRef.current);
+    }
+    if (turnState === 'user') {
+      pendingAiTextRef.current = '';
+    }
+  }, [turnState, startAiTyping]);
+
+  const [voiceMessages, setVoiceMessages] = useState<Message[]>([]);
+
   const finishAnswer = useCallback(() => {
     speechRef.current?.sendEndOfTurn();
-    // Read transcript from ref — safe to call outside state updater
     const transcript = transcriptRef.current.trim();
-    if (transcript && onSendMessage) onSendMessage(transcript);
+    if (transcript) {
+      // Add user message to local voice chat (display only — WS handles LLM)
+      setVoiceMessages(prev => [...prev, {
+        role: 'user', agent: 'user', content: transcript,
+        timestamp: new Date().toISOString()
+      }]);
+    }
     transcriptRef.current = '';
     setAccumulatedTranscript('');
     setIsUserSpeaking(false);
     setVoiceActivityLevel(0);
-  }, [onSendMessage]);
+  }, []);
 
   useEffect(() => {
     return () => stopVoiceSession();
@@ -176,16 +199,15 @@ export function useVoiceFirstInterview(
   const isProcessing = false;
   const isDisabled   = sessionData.state !== 'interviewing';
 
-  const unlockAudio = useCallback(() => {
-    playerRef.current?.unlock().catch(() => {});
-  }, []);
-
   const toggleMicrophone = useCallback(async () => {
     if (!speechRef.current) await startVoiceSession();
   }, [startVoiceSession]);
 
+  // Merge parent messages (REST intro) + voice messages (WS conversation) in order
+  const allMessages = [...sessionData.messages, ...voiceMessages];
+
   return {
-    messages:      sessionData.messages,
+    messages:      allMessages,
     isLoading:     sessionData.isLoading,
     state:         sessionData.state,
     results:       sessionData.results,
@@ -211,7 +233,6 @@ export function useVoiceFirstInterview(
     isDisabled,
     turnState,
 
-    unlockAudio,
     toggleMicrophone,
     startVoiceSession,
     stopVoiceSession,

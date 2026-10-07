@@ -13,7 +13,7 @@ export class StreamingAudioPlayer {
   private activeSources: AudioBufferSourceNode[] = [];
   private onPlaybackStateChange?: (isPlaying: boolean) => void;
   private endDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly END_DEBOUNCE_MS = 300;
+  private readonly END_DEBOUNCE_MS = 1500; // longer for streaming TTS — gaps between network chunks
   private chunkCount = 0;
 
   constructor(onPlaybackStateChange?: (isPlaying: boolean) => void) {
