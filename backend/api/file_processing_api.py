@@ -1,8 +1,9 @@
 import io
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from backend.api.auth_api import get_current_user
 from backend.config import get_logger
 from backend.config.file_processing_config import ERROR_MESSAGES
 from backend.utils.file_utils import extract_text_from_docx, extract_text_from_pdf
@@ -33,10 +34,14 @@ def create_file_processing_api(app):
     file_validator = create_file_validator(logger)
 
     @router.post("/upload-resume", response_model=ResumeUploadResponse)
-    async def upload_resume(file: UploadFile = File(...)):
+    async def upload_resume(
+        file: UploadFile = File(...),
+        current_user: dict = Depends(get_current_user),
+    ):
         """
         Uploads a resume file (PDF or DOCX) and extracts text content.
         Includes security validations for file size, type, and content.
+        Requires authenticated user.
         """
         logger.info(f"Received resume upload request for file: {file.filename}, type: {file.content_type}")    
         

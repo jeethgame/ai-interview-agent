@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user
 from backend.database import get_question_bank_db
 
 router = APIRouter(
@@ -14,6 +15,7 @@ router = APIRouter(
 async def get_questions(
     assessment: bool = False,
     db: AsyncSession = Depends(get_question_bank_db),
+    user: dict = Depends(get_current_user),
 ):
     try:
         result = await db.execute(

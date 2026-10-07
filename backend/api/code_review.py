@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user
 from backend.database import get_db
 from backend.models.review import CodeReview
 
@@ -105,7 +106,11 @@ def analyze_ast(source_code: str) -> tuple[str, str, int, int, list[str], list[s
         return "N/A", "N/A", 0, 0, [f"Syntax error on line {e.lineno}: {e.msg}"], ["Fix syntax errors before static AST review"], "AST Parse failed due to syntax error."
 
 @router.post("/code-review", response_model=CodeReviewResponse)
-async def review_code(req: CodeReviewRequest, db: AsyncSession = Depends(get_db)):
+async def review_code(
+    req: CodeReviewRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Analyze source code AST for Big-O complexity, cyclomatic density, and code smells."""
     time_comp, space_comp, cyc, loop_depth, smells, suggestions, feedback = analyze_ast(req.code)
 

@@ -65,16 +65,21 @@ async def interview_ws(
     """
     await websocket.accept()
 
-    # Authenticate
-    user_id = None
-    if token:
-        try:
-            payload = await _decode_token(token)
-            user_id = payload.get("sub")
-        except Exception:
-            await _safe_send(websocket, {"type": "ERROR", "code": 401, "message": "Invalid token"})
-            await websocket.close(code=4001)
-            return
+    # Strict Authentication
+    if not token:
+        await _safe_send(websocket, {"type": "ERROR", "code": 401, "message": "Authentication token required"})
+        await websocket.close(code=4001)
+        return
+
+    try:
+        payload = await _decode_token(token)
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("Token missing sub claim")
+    except Exception:
+        await _safe_send(websocket, {"type": "ERROR", "code": 401, "message": "Invalid or expired token"})
+        await websocket.close(code=4001)
+        return
 
     session_manager = await _get_session_manager(session_id)
     if not session_manager:

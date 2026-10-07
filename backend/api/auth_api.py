@@ -19,13 +19,22 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-import boto3
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+except ImportError:
+    boto3 = None
+    class ClientError(Exception):
+        pass
+
 import httpx
 import jwt
-from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jwt.algorithms import RSAAlgorithm
+try:
+    from jwt.algorithms import RSAAlgorithm
+except ImportError:
+    RSAAlgorithm = None
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,12 +57,14 @@ _jwks_cache: dict = {}
 
 def _get_cognito():
     global _cognito
+    if boto3 is None:
+        raise HTTPException(status_code=503, detail="AWS boto3 SDK not installed")
     if _cognito is None:
         _cognito = boto3.client("cognito-idp", region_name=COGNITO_REGION)
     return _cognito
 
 def _cognito_available() -> bool:
-    return bool(COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID)
+    return bool(boto3 is not None and COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID)
 
 # ── JWKS-based JWT validation (Cognito) ──────────────────────────────────
 
@@ -81,6 +92,39 @@ async def _verify_cognito_token(token: str) -> dict:
         options={"verify_aud": False},
     )
 
+ROLE_CANDIDATE = "candidate"
+ROLE_FACULTY = "faculty"
+ROLE_ADMIN = "admin"
+VALID_ROLES = {ROLE_CANDIDATE, ROLE_FACULTY, ROLE_ADMIN}
+
+def _extract_role_from_payload(payload: dict[str, Any]) -> str:
+    """Extract and normalize user role from JWT claims or Cognito groups."""
+    role = payload.get("role") or payload.get("custom:role")
+    if role:
+        cleaned = str(role).strip().lower()
+        if cleaned in VALID_ROLES:
+            return cleaned
+
+    groups = payload.get("cognito:groups")
+    if groups:
+        if isinstance(groups, str):
+            groups = [groups]
+        normalized_groups = [str(g).strip().lower() for g in groups]
+        if ROLE_ADMIN in normalized_groups:
+            return ROLE_ADMIN
+        if ROLE_FACULTY in normalized_groups:
+            return ROLE_FACULTY
+        if ROLE_CANDIDATE in normalized_groups:
+            return ROLE_CANDIDATE
+
+    email = payload.get("email", "").lower()
+    if "admin" in email:
+        return ROLE_ADMIN
+    if "faculty" in email:
+        return ROLE_FACULTY
+
+    return ROLE_CANDIDATE
+
 def _verify_mock_token(token: str) -> dict:
     return jwt.decode(token, _MOCK_SECRET, algorithms=["HS256"])
 
@@ -90,6 +134,9 @@ async def _decode_token(token: str) -> dict:
     if USE_MOCK_AUTH:
         return _verify_mock_token(token)
     raise HTTPException(status_code=500, detail="Auth not configured")
+
+# Public alias for modules importing token decode logic
+decode_token = _decode_token
 
 # ── FastAPI security ──────────────────────────────────────────────────────
 
@@ -102,11 +149,12 @@ async def get_current_user_optional(
         return None
     try:
         payload = await _decode_token(credentials.credentials)
+        role = _extract_role_from_payload(payload)
         return {
             "id": payload.get("sub"),
             "email": payload.get("email", ""),
             "name": payload.get("name", ""),
-            "role": payload.get("role", "candidate"),
+            "role": role,
             "payload": payload,
         }
     except Exception as e:
@@ -117,32 +165,76 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict[str, Any]:
     if not credentials or not credentials.credentials:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         payload = await _decode_token(credentials.credentials)
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token: missing subject claim",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        role = _extract_role_from_payload(payload)
         return {
             "id": user_id,
             "email": payload.get("email", ""),
             "name": payload.get("name", ""),
-            "role": payload.get("role", "candidate"),
+            "role": role,
             "payload": payload,
         }
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    except Exception as exc:
+        logger.debug(f"Token decoding failed: {exc}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-def require_role(*roles):
-    """Dependency factory: raises 403 if the authenticated user's role isn't in the allowed set."""
-    async def _check(user: dict[str, Any] = Depends(get_current_user)):
-        if user.get("role") not in roles:
-            raise HTTPException(status_code=403, detail="Insufficient role")
+import fastapi.params
+
+class RoleChecker(fastapi.params.Depends):
+    """
+    Role-Based Access Control (RBAC) dependency.
+    Dual-use:
+      - Can be passed directly: `user: dict = require_role("admin", "faculty")`
+      - Can be wrapped in Depends: `user: dict = Depends(require_role("admin", "faculty"))`
+    """
+    def __init__(self, *roles: str):
+        self.roles = {r.strip().lower() for r in roles}
+        super().__init__(dependency=self._check)
+
+    async def _check(self, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+        user_role = (user.get("role") or ROLE_CANDIDATE).lower()
+        if user_role not in self.roles:
+            allowed = ", ".join(sorted(self.roles))
+            logger.warning(
+                f"RBAC authorization failure: user={user.get('email', 'unknown')} "
+                f"with role='{user_role}' denied access. Required one of: [{allowed}]"
+            )
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access forbidden: role '{user_role}' does not have required permissions ({allowed})",
+            )
         return user
-    return Depends(_check)
 
+    async def __call__(self, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+        return await self._check(user=user)
+
+def require_role(*roles: str) -> RoleChecker:
+    """Dependency ensuring the authenticated user has at least one of the specified roles."""
+    return RoleChecker(*roles)
+
+# Pre-configured role dependencies
+require_admin = require_role(ROLE_ADMIN)
+require_faculty_or_admin = require_role(ROLE_ADMIN, ROLE_FACULTY)
+require_candidate = require_role(ROLE_CANDIDATE, ROLE_ADMIN)
 
 # ── Pydantic models ───────────────────────────────────────────────────────
 
@@ -150,6 +242,12 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     name: str | None = None
+    role: str | None = "candidate"
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
     role: str | None = "candidate"
 
 class LoginRequest(BaseModel):
@@ -287,7 +385,7 @@ def create_auth_api(app):
             display_name = body.email.split("@")[0]
             role = _mock_role(body.email)
             await _ensure_platform_user(uid, body.email, display_name, role)
-            return _mock_tokens(uid, body.email, display_name)
+            return _mock_tokens(uid, body.email, display_name, role)
         if not _cognito_available():
             raise HTTPException(status_code=503, detail="Auth service not configured")
         try:
@@ -300,6 +398,7 @@ def create_auth_api(app):
             )
             tokens = resp["AuthenticationResult"]
             payload = jwt.decode(tokens["IdToken"], options={"verify_signature": False})
+            user_role = _extract_role_from_payload(payload)
             return AuthTokenResponse(
                 access_token=tokens["AccessToken"],
                 refresh_token=tokens["RefreshToken"],
@@ -307,6 +406,7 @@ def create_auth_api(app):
                     id=payload.get("sub", ""),
                     email=payload.get("email", body.email),
                     name=payload.get("name", ""),
+                    role=user_role,
                 ),
             )
         except ClientError as e:

@@ -111,7 +111,7 @@ async def _db():
 @router.post("/", response_model=OrgResponse)
 async def create_org(
     body: OrgCreate,
-    user: dict = require_role("admin", "faculty"),
+    user: dict = require_role("admin"),
 ):
     try:
         from sqlalchemy import text
@@ -152,7 +152,7 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
 
 
 @router.get("/{org_id}/stats")
-async def get_org_stats(org_id: str, user: dict = Depends(get_current_user)):
+async def get_org_stats(org_id: str, user: dict = require_role("admin", "faculty")) :
     """Aggregate analytics: total candidates, drives, completion rates."""
     try:
         from sqlalchemy import text
@@ -179,7 +179,7 @@ async def get_org_stats(org_id: str, user: dict = Depends(get_current_user)):
 # ── Cohorts ───────────────────────────────────────────────────────────────
 
 @router.post("/{org_id}/cohorts", response_model=CohortResponse)
-async def create_cohort(org_id: str, body: CohortCreate, user: dict = Depends(get_current_user)):
+async def create_cohort(org_id: str, body: CohortCreate, user: dict = require_role("admin", "faculty")):
     try:
         from sqlalchemy import text
         db = await _db()
@@ -197,7 +197,7 @@ async def create_cohort(org_id: str, body: CohortCreate, user: dict = Depends(ge
 
 
 @router.get("/{org_id}/cohorts")
-async def list_cohorts(org_id: str, user: dict = Depends(get_current_user)):
+async def list_cohorts(org_id: str, user: dict = require_role("admin", "faculty")):
     try:
         from sqlalchemy import text
         db = await _db()
@@ -218,7 +218,7 @@ async def list_cohorts(org_id: str, user: dict = Depends(get_current_user)):
 async def add_cohort_members(
     org_id: str, cohort_id: str,
     body: AllocateRequest,
-    user: dict = Depends(get_current_user),
+    user: dict = require_role("admin", "faculty"),
 ):
     try:
         from sqlalchemy import text
@@ -243,7 +243,7 @@ async def add_cohort_members(
 # ── Placement Drives ──────────────────────────────────────────────────────
 
 @router.post("/{org_id}/drives", response_model=DriveResponse)
-async def create_drive(org_id: str, body: DriveCreate, user: dict = Depends(get_current_user)):
+async def create_drive(org_id: str, body: DriveCreate, user: dict = require_role("admin", "faculty")):
     try:
         from sqlalchemy import text
         db = await _db()
@@ -268,7 +268,7 @@ async def create_drive(org_id: str, body: DriveCreate, user: dict = Depends(get_
 
 
 @router.get("/{org_id}/drives")
-async def list_drives(org_id: str, user: dict = Depends(get_current_user)):
+async def list_drives(org_id: str, user: dict = require_role("admin", "faculty")):
     try:
         from sqlalchemy import text
         db = await _db()
@@ -290,7 +290,7 @@ async def list_drives(org_id: str, user: dict = Depends(get_current_user)):
 async def allocate_candidates(
     org_id: str, drive_id: str,
     body: AllocateRequest,
-    user: dict = Depends(get_current_user),
+    user: dict = require_role("admin", "faculty"),
 ):
     try:
         from sqlalchemy import text
@@ -313,7 +313,7 @@ async def allocate_candidates(
 
 
 @router.get("/{org_id}/drives/{drive_id}/results")
-async def get_drive_results(org_id: str, drive_id: str, user: dict = Depends(get_current_user)):
+async def get_drive_results(org_id: str, drive_id: str, user: dict = require_role("admin", "faculty")):
     """Per-candidate results for a placement drive."""
     try:
         from sqlalchemy import text
@@ -352,7 +352,7 @@ async def get_drive_results(org_id: str, drive_id: str, user: dict = Depends(get
 # ── Faculty Analytics ─────────────────────────────────────────────────────
 
 @router.get("/{org_id}/analytics/overview")
-async def analytics_overview(org_id: str, user: dict = Depends(get_current_user)):
+async def analytics_overview(org_id: str, user: dict = require_role("admin", "faculty")):
     """Cohort-level aggregate: avg scores, completion rates, top weaknesses."""
     try:
         from sqlalchemy import text
@@ -382,7 +382,7 @@ async def analytics_overview(org_id: str, user: dict = Depends(get_current_user)
 async def analytics_candidates(
     org_id: str,
     cohort_id: str | None = None,
-    user: dict = Depends(get_current_user),
+    user: dict = require_role("admin", "faculty"),
 ):
     """Per-candidate performance summary for faculty view. Anonymised — no raw transcripts."""
     try:

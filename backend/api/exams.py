@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user, require_role
 from backend.database import get_db
 from backend.models.formal_exam import ExamAttempt, FormalExam
 
@@ -49,7 +50,11 @@ class AttemptResponse(BaseModel):
     started_at: datetime
 
 @router.post("/create", response_model=ExamResponse)
-async def create_exam(req: CreateExamRequest, db: AsyncSession = Depends(get_db)):
+async def create_exam(
+    req: CreateExamRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_role("admin", "faculty"),
+):
     """Create a formal scheduled coding assessment with lockdown integrity constraints."""
     exam = FormalExam(
         title=req.title,
@@ -73,7 +78,11 @@ async def create_exam(req: CreateExamRequest, db: AsyncSession = Depends(get_db)
     )
 
 @router.get("/{exam_id}", response_model=ExamResponse)
-async def get_exam(exam_id: str, db: AsyncSession = Depends(get_db)):
+async def get_exam(
+    exam_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Fetch formal exam configuration and lockdown constraints."""
     exam = await db.get(FormalExam, exam_id)
     if not exam:
@@ -90,7 +99,12 @@ async def get_exam(exam_id: str, db: AsyncSession = Depends(get_db)):
     )
 
 @router.post("/{exam_id}/start", response_model=AttemptResponse)
-async def start_exam_attempt(exam_id: str, req: StartAttemptRequest, db: AsyncSession = Depends(get_db)):
+async def start_exam_attempt(
+    exam_id: str,
+    req: StartAttemptRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Initialize candidate attempt in locked-down environment."""
     exam = await db.get(FormalExam, exam_id)
     if not exam or not exam.is_active:
@@ -135,7 +149,12 @@ async def start_exam_attempt(exam_id: str, req: StartAttemptRequest, db: AsyncSe
     )
 
 @router.post("/{exam_id}/infraction", response_model=AttemptResponse)
-async def log_exam_infraction(exam_id: str, req: InfractionRequest, db: AsyncSession = Depends(get_db)):
+async def log_exam_infraction(
+    exam_id: str,
+    req: InfractionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Record proctoring infraction (window blur, tab switch); auto-disqualify after 3 strikes."""
     candidate_id = req.candidate_id or "guest-candidate"
 
@@ -190,7 +209,12 @@ async def log_exam_infraction(exam_id: str, req: InfractionRequest, db: AsyncSes
     )
 
 @router.post("/{exam_id}/submit", response_model=AttemptResponse)
-async def submit_exam_attempt(exam_id: str, req: SubmitExamRequest, db: AsyncSession = Depends(get_db)):
+async def submit_exam_attempt(
+    exam_id: str,
+    req: SubmitExamRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Finalize candidate exam submission and compute baseline score."""
     stmt = (
         select(ExamAttempt)

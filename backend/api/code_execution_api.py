@@ -4,9 +4,10 @@ import os
 import time
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from backend.api.auth_api import get_current_user
 from backend.services.coding_question_service import get_hidden_test_cases
 
 router = APIRouter()
@@ -254,7 +255,10 @@ def _execute_test_case(
 
 
 @router.post("/submit")
-def submit_code(request: SubmitRequest):
+def submit_code(
+    request: SubmitRequest,
+    current_user: dict = Depends(get_current_user),
+):
     if not request.source_code.strip():
         raise HTTPException(
             status_code=400,
@@ -365,7 +369,10 @@ def submit_code(request: SubmitRequest):
 
 
 @router.post("/run")
-def run_code(request: RunRequest):
+def run_code(
+    request: RunRequest,
+    current_user: dict = Depends(get_current_user),
+):
     if not request.source_code.strip():
         raise HTTPException(
             status_code=400,

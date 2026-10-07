@@ -8,7 +8,17 @@ import os
 from datetime import datetime
 from typing import Any
 
-import backoff
+try:
+    import backoff
+except ImportError:
+    class _BackoffFallback:
+        expo = None
+        @staticmethod
+        def on_exception(*args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    backoff = _BackoffFallback()
 import httpx
 from dotenv import load_dotenv
 

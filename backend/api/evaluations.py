@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user
 from backend.database import get_db
 from backend.models.rubric import RubricEvaluation
 
@@ -82,7 +83,11 @@ def generate_personalized_roadmap(weaknesses: list[str]) -> list[dict]:
     ]
 
 @router.post("/score", response_model=EvaluationResponse)
-async def score_evaluation(req: ScoreEvaluationRequest, db: AsyncSession = Depends(get_db)):
+async def score_evaluation(
+    req: ScoreEvaluationRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Compute weighted rubric score across 5 dimensions and synthesize 30-day coach plan."""
     # Weighted score calculation (out of 100)
     # Weights: Correctness 30%, Complexity 25%, System Design 20%, Communication 15%, Veracity 10%
@@ -154,7 +159,11 @@ async def score_evaluation(req: ScoreEvaluationRequest, db: AsyncSession = Depen
     )
 
 @router.get("/{session_id}", response_model=EvaluationResponse)
-async def get_evaluation(session_id: str, db: AsyncSession = Depends(get_db)):
+async def get_evaluation(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Retrieve multi-dimensional scorecard and coaching plan for an interview session."""
     stmt = (
         select(RubricEvaluation)
