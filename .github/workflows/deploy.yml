@@ -115,10 +115,17 @@ jobs:
             --force-new-deployment
           aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE
 
-      - name: Build and deploy frontend
+      - name: Build and deploy frontend to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           cd frontend
           npm ci
-          ALB_DNS=$(aws elbv2 describe-load-balancers --names p08-alb --query "LoadBalancers[0].DNSName" --output text)
-          VITE_API_BASE_URL="http://$ALB_DNS" npm run build
-          aws s3 sync dist/ "s3://$S3_BUCKET/" --delete
+          VITE_API_BASE_URL="https://api.prajeeth.tech" \
+          VITE_API_WS_URL="wss://api.prajeeth.tech" \
+          npm run build
+          npx wrangler pages deploy dist --project-name ai-interview --commit-dirty=true
+
+      - name: Also sync frontend to S3 (backup)
+        run: |
+          aws s3 sync frontend/dist/ "s3://$S3_BUCKET/" --delete
