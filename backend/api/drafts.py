@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user
 from backend.database import get_db
 from backend.models.draft import Draft
 
@@ -36,6 +37,7 @@ class DraftResponse(BaseModel):
 async def create_draft(
     draft_data: DraftCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     if draft_data.draft_id:
         result = await db.execute(
@@ -103,6 +105,7 @@ async def get_draft(
     question_id: str,
     language: str,
     db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     result = await db.execute(
         select(Draft).where(

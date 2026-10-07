@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user
 from backend.database import get_db
 from backend.models.agent_turn import AgentTurn
 
@@ -68,7 +69,11 @@ def generate_heuristic_probe(candidate_response: str, turn_index: int, claim_con
     return observation, reasoning, decision, probe_question, difficulty, confidence
 
 @router.post("/live-probe", response_model=LiveProbeResponse)
-async def live_probe(req: LiveProbeRequest, db: AsyncSession = Depends(get_db)):
+async def live_probe(
+    req: LiveProbeRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Dynamic Probing Agent: Observe candidate input -> Reason on technical depth -> Decide -> Act."""
     # Observe -> Reason -> Decide -> Act
     observation, reasoning, decision, probe_question, difficulty, confidence = generate_heuristic_probe(

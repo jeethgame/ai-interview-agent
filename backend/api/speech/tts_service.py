@@ -9,9 +9,16 @@ import logging
 import os
 import random
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+try:
+    import boto3
+    from botocore.config import Config
+    from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+except ImportError:
+    boto3 = None
+    Config = None
+    ClientError = Exception
+    NoCredentialsError = Exception
+    PartialCredentialsError = Exception
 from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 

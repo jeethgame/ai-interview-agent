@@ -37,7 +37,7 @@ from pydantic import BaseModel, Field
 _env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 load_dotenv(dotenv_path=_env_path) if os.path.exists(_env_path) else load_dotenv()
 
-from backend.api.auth_api import get_current_user_optional
+from backend.api.auth_api import get_current_user, require_role, decode_token, _extract_role_from_payload
 from backend.database.db_manager import DatabaseManager
 from backend.services.rate_limiting import get_rate_limiter
 
@@ -119,46 +119,20 @@ async def get_session_id_from_header_optional(
 async def validate_websocket_token(token: str) -> dict[str, Any] | None:
     """
     Validate JWT token for WebSocket connections.
-    Returns user data if valid, None if invalid.
+    Supports Cognito, Supabase, and Mock auth via auth_api.decode_token.
     """
     try:
-        # Get JWT secret - check for mock mode first
-        jwt_secret = os.environ.get("SUPABASE_JWT_SECRET")
-        if not jwt_secret:
-            # Check if we're in mock mode
-            use_mock_auth = os.environ.get("USE_MOCK_AUTH", "false").lower() == "true"
-            if use_mock_auth:
-                # Use mock secret for development
-                jwt_secret = "development_secret_key_not_for_production"
-            else:
-                return None
-        
-        # Decode token
-        payload = jwt.decode(
-            token, 
-            jwt_secret,
-            algorithms=["HS256"],
-            options={
-                "verify_signature": True,
-                "verify_aud": False  # Disable audience verification for Supabase JWTs
-            }
-        )
-        
-        # Check if token has expired
-        from datetime import datetime
-        if datetime.fromtimestamp(payload.get("exp", 0)) < datetime.utcnow():
-            return None
-        
-        # Get user ID from token
+        payload = await decode_token(token)
         user_id = payload.get("sub")
         if not user_id:
             return None
-        
-        # Get user from database
-        db_manager = await get_database_manager()
-        user = await db_manager.get_user(user_id)
-        return user
-    
+        return {
+            "id": user_id,
+            "email": payload.get("email", ""),
+            "name": payload.get("name", ""),
+            "role": _extract_role_from_payload(payload),
+            "payload": payload,
+        }
     except Exception as e:
         logger.debug(f"WebSocket token validation failed: {e}")
         return None
@@ -376,11 +350,11 @@ def create_speech_api(app):
         language: str = Form("en-US"),
         session_id: str | None = Depends(get_session_id_from_header_optional),
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Transcribe uploaded audio file using AssemblyAI with database task tracking.
-        Authentication and session ID are optional.
+        Requires authenticated user. Session ID is optional.
         
         Args:
             audio_file: Audio file to transcribe
@@ -429,11 +403,11 @@ def create_speech_api(app):
         task_id: str,
         session_id: str | None = Depends(get_session_id_from_header_optional),
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Check the status of a transcription task.
-        Authentication and session ID are optional.
+        Requires authenticated user. Session ID is optional.
         
         Args:
             task_id: Task identifier
@@ -737,17 +711,11 @@ def create_speech_api(app):
         text: str = Form(...),
         voice_id: str | None = Form(None),
         speed: float = Form(1.0, ge=0.5, le=2.0),
+        current_user: dict[str, Any] = Depends(get_current_user),
     ):
         """
         Convert text to speech using Amazon Polly with rate limiting.
-        
-        Args:
-            text: Text to convert to speech
-            voice_id: Voice ID to use
-            speed: Speech speed
-            
-        Returns:
-            Audio file response
+        Requires authenticated user.
         """
         return await tts_service.synthesize_text(text, voice_id, speed)
 
@@ -756,27 +724,21 @@ def create_speech_api(app):
         text: str = Form(...),
         voice_id: str | None = Form(None),
         speed: float = Form(1.0, ge=0.5, le=2.0),
+        current_user: dict[str, Any] = Depends(get_current_user),
     ):
         """
         Convert text to speech and stream the audio with rate limiting.
-        
-        Args:
-            text: Text to convert to speech
-            voice_id: Voice ID to use
-            speed: Speech speed
-            
-        Returns:
-            Streaming audio response
+        Requires authenticated user.
         """
         return await tts_service.stream_text(text, voice_id, speed)
 
     @router.get("/api/speech/usage-stats")
-    async def get_speech_usage_stats():
+    async def get_speech_usage_stats(
+        current_user: dict[str, Any] = Depends(require_role("admin", "faculty")),
+    ):
         """
         Get current API usage statistics for all speech services.
-        
-        Returns:
-            Usage statistics for AssemblyAI, Polly, and Deepgram
+        Restricted to Admin and Faculty roles.
         """
         return JSONResponse(rate_limiter.get_usage_stats())
 
@@ -785,14 +747,14 @@ def create_speech_api(app):
     async def start_speech_task(
         task_request: SpeechTaskRequest,
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Start a new speech processing task.
-        Authentication is optional - anonymous users can use speech features.
+        Requires authenticated user.
         """
-        user_id = current_user["id"] if current_user else None
-        user_email = current_user["email"] if current_user else "anonymous"
+        user_id = current_user["id"]
+        user_email = current_user["email"]
         
         try:
             logger.info(f"Starting speech task for user: {user_email}")
@@ -809,7 +771,7 @@ def create_speech_api(app):
     async def get_speech_task_status(
         task_id: str,
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Get the status of a speech processing task.

@@ -10,8 +10,10 @@ import logging
 import os
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
+from backend.api.auth_api import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,10 @@ def _decode(s: str | None) -> str:
 
 
 @router.post("/run")
-async def run_code(request: RunRequest):
+async def run_code(
+    request: RunRequest,
+    current_user: dict = Depends(get_current_user),
+):
     judge0_url, headers = _judge0_config()
     if not judge0_url:
         return {
@@ -113,7 +118,10 @@ async def run_code(request: RunRequest):
 
 
 @router.post("/submit")
-async def submit_code(request: SubmitRequest):
+async def submit_code(
+    request: SubmitRequest,
+    current_user: dict = Depends(get_current_user),
+):
     return {
         "status": "error",
         "passed": False,

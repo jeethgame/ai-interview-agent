@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user
 from backend.database import get_db
 from backend.models.resume_claim import ResumeClaim
 
@@ -62,12 +63,17 @@ class ResumeClaimResponse(BaseModel):
     claims: list[str]
 
 @router.post("/parse", response_model=ResumeClaimResponse)
-async def parse_resume(req: ParseResumeTextRequest, db: AsyncSession = Depends(get_db)):
+async def parse_resume(
+    req: ParseResumeTextRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Parse candidate resume into skills, projects, and verifiable technical claims."""
+    target_user_id = req.user_id if req.user_id and user.get("role") in ("admin", "faculty") else user["id"]
     skills, projects, claims = extract_claims_from_text(req.resume_text)
 
     claim_record = ResumeClaim(
-        user_id=req.user_id,
+        user_id=target_user_id,
         raw_text=req.resume_text,
         extracted_skills=json.dumps(skills),
         extracted_projects=json.dumps(projects),
@@ -85,8 +91,15 @@ async def parse_resume(req: ParseResumeTextRequest, db: AsyncSession = Depends(g
     )
 
 @router.get("/{user_id}", response_model=ResumeClaimResponse)
-async def get_user_claims(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_user_claims(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Retrieve previously parsed resume claims for a candidate."""
+    if user.get("role") == "candidate" and user.get("id") != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Cannot view another candidate's claims")
+
     stmt = select(ResumeClaim).where(ResumeClaim.user_id == user_id).order_by(ResumeClaim.created_at.desc())
     res = await db.execute(stmt)
     claim_record = res.scalars().first()

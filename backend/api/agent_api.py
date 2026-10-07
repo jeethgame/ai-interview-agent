@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from backend.agents.config_models import SessionConfig
 from backend.agents.orchestrator import AgentSessionManager
-from backend.api.auth_api import get_current_user, get_current_user_optional
+from backend.api.auth_api import get_current_user
 from backend.config import get_logger
 from backend.services.session_manager import ThreadSafeSessionRegistry
 
@@ -176,13 +176,13 @@ def create_agent_api(app):
     async def create_session(
         start_request: InterviewStartRequest,
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Create a new interview session with configuration.
         Returns a session ID that must be used in subsequent requests.
         
-        Authentication is optional - anonymous users can create sessions.
+        Requires authenticated candidate or user.
         """
         user_id = current_user["id"] if current_user else None
         user_email = current_user["email"] if current_user else "anonymous"
@@ -212,12 +212,12 @@ def create_agent_api(app):
     async def start_interview(
         start_request: InterviewStartRequest,
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
+        current_user: dict[str, Any] = Depends(get_current_user),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
         Configure an existing session, reset its state, and return the initial introduction message.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         """
         user_email = current_user["email"] if current_user else "anonymous"
         logger.info(f"Configuring session {session_manager.session_id} for user: {user_email} with: {start_request.dict()}")
@@ -258,12 +258,12 @@ def create_agent_api(app):
     async def post_message(
         user_input: UserInput,
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
+        current_user: dict[str, Any] = Depends(get_current_user),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
         Send a user message to the interview session.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         """
         user_email = current_user["email"] if current_user else "anonymous"
         logger.info(f"Session {session_manager.session_id} received message from {user_email}: '{user_input.message[:50]}...'")
@@ -283,12 +283,12 @@ def create_agent_api(app):
     @router.post("/end", response_model=EndResponse)
     async def end_interview(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
+        current_user: dict[str, Any] = Depends(get_current_user),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
         End the interview session and retrieve final results.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         NOTE: This endpoint NEVER returns final summary - frontend must poll /final-summary-status.
         """
         user_email = current_user["email"] if current_user else "anonymous"
@@ -329,13 +329,13 @@ def create_agent_api(app):
     @router.get("/final-summary-status", response_model=FinalSummaryStatusResponse)
     async def get_final_summary_status(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
+        current_user: dict[str, Any] = Depends(get_current_user),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
         poll_count: int | None = Query(None, description="Current poll attempt count for exponential backoff")
     ):
         """
         Check the status of final summary generation.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         NOTE: This is a read-only operation - no session saving needed.
         """
         user_email = current_user["email"] if current_user else "anonymous"
@@ -426,11 +426,11 @@ def create_agent_api(app):
     @router.get("/history", response_model=HistoryResponse)
     async def get_history(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Get conversation history for the session.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         """
         user_email = current_user["email"] if current_user else "anonymous"
         logger.info(f"Getting history for session {session_manager.session_id} for user: {user_email}")
@@ -446,11 +446,11 @@ def create_agent_api(app):
     @router.get("/stats", response_model=StatsResponse)
     async def get_stats(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Get statistics for the session.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         """
         user_email = current_user["email"] if current_user else "anonymous"
         logger.info(f"Getting stats for session {session_manager.session_id} for user: {user_email}")
@@ -466,11 +466,11 @@ def create_agent_api(app):
     @router.get("/per-turn-feedback", response_model=list[dict[str, str]])
     async def get_per_turn_feedback(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Get current per-turn coaching feedback for the session.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         This endpoint allows real-time access to coaching feedback as it's generated.
         """
         user_email = current_user["email"] if current_user else "anonymous"
@@ -485,12 +485,12 @@ def create_agent_api(app):
     @router.post("/reset", response_model=ResetResponse)
     async def reset_interview(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
+        current_user: dict[str, Any] = Depends(get_current_user),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
         Reset the session state.
-        Requires X-Session-ID header. Authentication is optional.
+        Requires X-Session-ID header and authentication.
         """
         user_email = current_user["email"] if current_user else "anonymous"
         logger.info(f"Resetting session {session_manager.session_id} for user: {user_email}")
@@ -514,7 +514,7 @@ def create_agent_api(app):
     async def get_session_time_remaining(
         session_id: str = Depends(get_session_id),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Get remaining time before session cleanup.
@@ -542,7 +542,7 @@ def create_agent_api(app):
     async def ping_session(
         session_id: str = Depends(get_session_id),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Extend session by resetting idle timer.
@@ -572,7 +572,7 @@ def create_agent_api(app):
     async def cleanup_session(
         session_id: str = Depends(get_session_id),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
+        current_user: dict[str, Any] = Depends(get_current_user)
     ):
         """
         Immediately cleanup session (for tab close events).

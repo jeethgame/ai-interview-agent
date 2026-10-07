@@ -14,6 +14,9 @@ from backend.config import get_logger
 
 logger = get_logger(__name__)
 
+# Legacy stub for test mocking
+create_client = None
+
 
 def _get_session() -> AsyncSession:
     from backend.database import _AsyncSessionLocal

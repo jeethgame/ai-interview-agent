@@ -7,8 +7,13 @@ import logging
 import os
 import uuid
 
-from deepgram import DeepgramClient, LiveOptions
-from deepgram.clients.live.v1.enums import LiveTranscriptionEvents
+try:
+    from deepgram import DeepgramClient, LiveOptions
+    from deepgram.clients.live.v1.enums import LiveTranscriptionEvents
+except ImportError:
+    DeepgramClient = None
+    LiveOptions = None
+    LiveTranscriptionEvents = None
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.services.rate_limiting import get_rate_limiter

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth_api import get_current_user
 from backend.database import get_db
 from backend.models.session import CodingInterviewSession, SessionStage
 
@@ -58,7 +59,11 @@ class SessionResponse(BaseModel):
     transcript: list
 
 @router.post("/start", response_model=SessionResponse)
-async def start_session(req: StartSessionRequest, db: AsyncSession = Depends(get_db)):
+async def start_session(
+    req: StartSessionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Initialize a new live interview session room."""
     init_transcript = [
         {
@@ -84,7 +89,11 @@ async def start_session(req: StartSessionRequest, db: AsyncSession = Depends(get
     )
 
 @router.get("/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
+async def get_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Fetch current interview room state and message history."""
     session = await db.get(CodingInterviewSession, session_id)
     if not session:
@@ -99,7 +108,12 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
     )
 
 @router.patch("/{session_id}/stage", response_model=SessionResponse)
-async def update_session_stage(session_id: str, req: UpdateStageRequest, db: AsyncSession = Depends(get_db)):
+async def update_session_stage(
+    session_id: str,
+    req: UpdateStageRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Transition the room between assessment stages (TECH -> CODING_TOOL -> EVALUATING)."""
     session = await db.get(CodingInterviewSession, session_id)
     if not session:
@@ -120,7 +134,12 @@ async def update_session_stage(session_id: str, req: UpdateStageRequest, db: Asy
     )
 
 @router.post("/{session_id}/message", response_model=SessionResponse)
-async def post_message(session_id: str, req: PostMessageRequest, db: AsyncSession = Depends(get_db)):
+async def post_message(
+    session_id: str,
+    req: PostMessageRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Append a message turn to the interview room transcript."""
     session = await db.get(CodingInterviewSession, session_id)
     if not session:
@@ -143,8 +162,18 @@ async def post_message(session_id: str, req: PostMessageRequest, db: AsyncSessio
     )
 
 @router.websocket("/ws/{session_id}")
-async def session_websocket(websocket: WebSocket, session_id: str):
+async def session_websocket(websocket: WebSocket, session_id: str, token: str | None = None):
     """Bi-directional WebSocket for real-time interview state & question streaming."""
+    if not token:
+        await websocket.close(code=4001)
+        return
+    try:
+        from backend.api.auth_api import decode_token
+        await decode_token(token)
+    except Exception:
+        await websocket.close(code=4001)
+        return
+
     await manager.connect(session_id, websocket)
     try:
         while True:

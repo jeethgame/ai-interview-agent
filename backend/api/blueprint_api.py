@@ -10,7 +10,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from backend.api.auth_api import get_current_user_optional
+from backend.api.auth_api import get_current_user
 from backend.blueprint import generate_blueprint
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class BlueprintResponse(BaseModel):
 @router.post("/create", response_model=BlueprintResponse)
 async def create_blueprint(
     body: BlueprintCreateRequest,
-    user: dict | None = Depends(get_current_user_optional),
+    user: dict = Depends(get_current_user),
 ):
     try:
         llm_service = None
@@ -64,7 +64,7 @@ async def create_blueprint(
 
 
 @router.get("/{blueprint_id}", response_model=BlueprintResponse)
-async def get_blueprint(blueprint_id: str):
+async def get_blueprint(blueprint_id: str, user: dict = Depends(get_current_user)):
     bp = _blueprint_store.get(blueprint_id)
     if not bp:
         raise HTTPException(status_code=404, detail="Blueprint not found")
