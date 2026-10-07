@@ -125,6 +125,7 @@ jobs:
             --arg CORS "http://p08-alb-1459152437.ap-south-1.elb.amazonaws.com,http://localhost:3000,http://localhost:8000,https://ai-interview-7r1.pages.dev,https://api.prajeeth.tech" '
             .containerDefinitions[0].image = $IMAGE |
             (.containerDefinitions[0].environment[] | select(.name == "CORS_ALLOWED_ORIGINS")).value = $CORS |
+            (.containerDefinitions[0].environment[] | select(.name == "USE_MOCK_AUTH")).value = "false" |
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
           ')
           echo "$NEW_DEF" > /tmp/new-task-def.json
