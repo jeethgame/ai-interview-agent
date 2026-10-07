@@ -45,18 +45,18 @@ export function useSEBGuard({
       onInfraction?.(reason, count);
 
       try {
-        await fetch(`${API_BASE}/exams/${examId}/infraction`, {
+        await fetch(`${API_BASE}/exams/${examId || "coding-assessment"}/infraction`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            candidate_id: candidateId,
+            candidate_id: candidateId || "guest-candidate",
             reason,
           }),
         });
-      } catch {
-        // Best effort only.
+      } catch (err) {
+        console.warn("[SEB] Failed to report infraction to backend:", err);
       }
 
       if (count >= maxInfractions) {

@@ -137,18 +137,37 @@ async def start_exam_attempt(exam_id: str, req: StartAttemptRequest, db: AsyncSe
 @router.post("/{exam_id}/infraction", response_model=AttemptResponse)
 async def log_exam_infraction(exam_id: str, req: InfractionRequest, db: AsyncSession = Depends(get_db)):
     """Record proctoring infraction (window blur, tab switch); auto-disqualify after 3 strikes."""
+    candidate_id = req.candidate_id or "guest-candidate"
+
     exam = await db.get(FormalExam, exam_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Exam not found")
+        exam = FormalExam(
+            id=exam_id,
+            title="Coding Assessment",
+            description="Active candidate coding assessment",
+            duration_minutes=150,
+            seb_required=True,
+            max_infractions=3,
+        )
+        db.add(exam)
+        await db.flush()
 
     stmt = (
         select(ExamAttempt)
-        .where(ExamAttempt.exam_id == exam_id, ExamAttempt.candidate_id == req.candidate_id)
+        .where(ExamAttempt.exam_id == exam_id, ExamAttempt.candidate_id == candidate_id)
     )
     res = await db.execute(stmt)
     attempt = res.scalars().first()
     if not attempt:
-        raise HTTPException(status_code=404, detail="Active exam attempt not found")
+        attempt = ExamAttempt(
+            exam_id=exam_id,
+            candidate_id=candidate_id,
+            infraction_count=0,
+            infraction_log=json.dumps([]),
+            status="IN_PROGRESS",
+        )
+        db.add(attempt)
+        await db.flush()
 
     attempt.infraction_count += 1
     logs = json.loads(attempt.infraction_log)

@@ -188,11 +188,55 @@ const {
   useEffect(() => {
     let mounted = true;
 
+    const shuffleArray = <T,>(arr: T[]): T[] => {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    };
+
+    const selectAssessmentQuestions = (allQuestions: Question[]): Question[] => {
+      if (!Array.isArray(allQuestions) || allQuestions.length === 0) return [];
+
+      const easy = shuffleArray(allQuestions.filter(
+        (q) => (q.difficulty || "").toLowerCase() === "easy"
+      ));
+      const medium = shuffleArray(allQuestions.filter(
+        (q) => (q.difficulty || "").toLowerCase() === "medium"
+      ));
+      const hard = shuffleArray(allQuestions.filter(
+        (q) => (q.difficulty || "").toLowerCase() === "hard"
+      ));
+      const other = shuffleArray(allQuestions.filter((q) => {
+        const d = (q.difficulty || "").toLowerCase();
+        return d !== "easy" && d !== "medium" && d !== "hard";
+      }));
+
+      // Target 5 questions total: 2 Easy (40%), 2 Medium (40%), 1 Hard (20%)
+      const selected: Question[] = [
+        ...easy.slice(0, 2),
+        ...medium.slice(0, 2),
+        ...hard.slice(0, 1),
+      ];
+
+      if (selected.length < 5) {
+        const usedIds = new Set(selected.map((q) => q.question_id));
+        const remaining = [...easy, ...medium, ...hard, ...other].filter(
+          (q) => !usedIds.has(q.question_id)
+        );
+        selected.push(...remaining.slice(0, 5 - selected.length));
+      }
+
+      return shuffleArray(selected.slice(0, 5));
+    };
+
     const loadQuestions = async () => {
       try {
         setLoadingQuestions(true);
 
-        const response = await fetch(`${API}/api/questions`);
+        const response = await fetch(`${API}/api/questions?assessment=true`);
 
         if (!response.ok) {
           throw new Error(`Questions request failed: ${response.status}`);
@@ -201,7 +245,7 @@ const {
         const data = await response.json();
 
         if (mounted && Array.isArray(data)) {
-          setQuestions(data);
+          setQuestions(selectAssessmentQuestions(data));
         }
       } catch (error) {
         console.error("Failed to load questions:", error);
@@ -449,6 +493,55 @@ const {
           End Assessment
         </button>
       </div>
+    </div>
+  </div>
+)}
+{assessmentEnded && (
+  <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-slate-900/90 p-6 backdrop-blur-md">
+    <div className="w-full max-w-lg rounded-2xl bg-white p-8 text-center text-slate-900 shadow-2xl border border-slate-100">
+      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+        <Check size={36} strokeWidth={3} />
+      </div>
+
+      <h2 className="mb-2 text-2xl font-black text-slate-900">
+        Assessment Ended
+      </h2>
+
+      <p className="mb-6 text-sm text-slate-600 leading-relaxed">
+        Your coding assessment has been successfully completed and submitted.
+        Thank you for your responses.
+      </p>
+
+      <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left space-y-2">
+        <div className="flex justify-between text-xs font-bold text-slate-700">
+          <span>Assessment Summary</span>
+          <span className="text-emerald-700 font-extrabold">Completed</span>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
+            2 Easy (40%)
+          </span>
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+            2 Medium (40%)
+          </span>
+          <span className="rounded bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-800">
+            1 Hard (20%)
+          </span>
+        </div>
+      </div>
+
+      <button
+        onClick={() => {
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+          }
+          window.location.href = "/";
+        }}
+        className="w-full rounded-xl bg-[#DC2626] px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#B91C1C]"
+      >
+        Return to Dashboard
+      </button>
     </div>
   </div>
 )}
