@@ -78,10 +78,31 @@ const Index = () => {
     }
   };
 
-  // Check backend health on component mount
+  // Check backend health on component mount & pre-fill assigned interview params
   useEffect(() => {
     checkBackendHealth();
-  }, []);
+
+    const roleParam = searchParams.get('role');
+    const styleParam = searchParams.get('style');
+    const durationParam = searchParams.get('duration');
+    const companyParam = searchParams.get('company');
+
+    if (roleParam) setJobRole(roleParam);
+    if (styleParam && ['formal', 'casual', 'aggressive', 'technical'].includes(styleParam)) {
+      setStyle(styleParam as any);
+    }
+    if (durationParam) {
+      const dur = parseInt(durationParam, 10);
+      if (!isNaN(dur) && dur > 0) setInterviewDuration(dur);
+    }
+    if (companyParam) setCompany(companyParam);
+
+    if (roleParam || styleParam || durationParam) {
+      setTimeout(() => {
+        configSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 200);
+    }
+  }, [searchParams]);
 
   // Clear required error when user starts typing job role
   useEffect(() => {

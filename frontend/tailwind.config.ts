@@ -104,9 +104,9 @@ export default {
 				}
 			},
 			fontFamily: {
-				'sans': ['"Montserrat"', 'sans-serif'],
+				'sans': ['"Inter"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
 				'mono': ['"JetBrains Mono"', 'monospace'],
-				'display': ['"Montserrat"', 'system-ui', 'sans-serif'],
+				'display': ['"Inter"', 'system-ui', 'sans-serif'],
 			},
 			borderRadius: {
 				lg: 'var(--radius)',

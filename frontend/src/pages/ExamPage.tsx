@@ -213,6 +213,12 @@ const LiveExam: React.FC<{
   const [output, setOutput] = useState<{ status: string; stdout: string; stderr: string } | null>(null);
 
   React.useEffect(() => {
+    if (exam.problems && exam.problems.length > 0) {
+      setSelectedProblem(exam.problems[0]);
+    }
+  }, [exam.problems]);
+
+  React.useEffect(() => {
     const t = setInterval(() => setTimeLeft(s => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
   }, []);
@@ -353,23 +359,43 @@ const ExamPage: React.FC = () => {
     const fetchExam = async () => {
       try {
         const token = getToken();
-        const r = await fetch(`${API}/exams/${examId}`, {
-          headers: { Authorization: token ? `Bearer ${token}` : '' },
-        });
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+        // Fetch exam config
+        const r = await fetch(`${API}/exams/${examId}`, { headers });
+        let examMeta: any = {};
         if (r.ok) {
-          const d = await r.json();
-          setExamData(prev => ({
-            ...prev,
-            title: d.title || prev.title,
-            duration_minutes: d.duration_minutes || prev.duration_minutes,
-            max_infractions: d.max_infractions || prev.max_infractions,
-          }));
+          examMeta = await r.json();
         }
+
+        // Fetch question bank questions
+        let dynamicProblems = MOCK_PROBLEM.problems;
+        try {
+          const qRes = await fetch(`${API}/api/questions?assessment=true`, { headers });
+          if (qRes.ok) {
+            const qData = await qRes.json();
+            if (Array.isArray(qData) && qData.length > 0) {
+              dynamicProblems = qData.map((q: any) => ({
+                id: q.question_id || q.id,
+                title: q.title,
+                difficulty: q.difficulty ? (q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1).toLowerCase()) : 'Medium',
+                description: `${q.description || ''}\n\nConstraints:\n${q.constraints || 'N/A'}\n\nExamples:\n${q.examples || 'N/A'}`,
+              }));
+            }
+          }
+        } catch { }
+
+        setExamData(prev => ({
+          ...prev,
+          title: examMeta.title || prev.title,
+          duration_minutes: examMeta.duration_minutes || prev.duration_minutes,
+          max_infractions: examMeta.max_infractions || prev.max_infractions,
+          problems: dynamicProblems,
+        }));
       } catch { }
     };
-    if (examId && examId !== 'exam-001') {
-      fetchExam();
-    }
+
+    fetchExam();
   }, [examId]);
 
   const { infractionCount, requestFullscreen } = useSEBGuard({

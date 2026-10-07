@@ -63,33 +63,49 @@ const LoginPage: React.FC = () => {
         </div>
 
         <div className="relative z-10">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#DC2626] flex items-center justify-center">
-              <Mic size={18} className="text-white" />
+          <Link to="/" className="flex items-center gap-3">
+            <img
+              src="/app-logo.jpg"
+              alt="AI Interview Portal"
+              className="w-10 h-10 rounded-xl object-cover border border-white/20 shadow-md"
+            />
+            <div className="h-8 w-[1px] bg-white/20" />
+            <img
+              src="/college-logo.png"
+              alt="St. Joseph's College of Engineering"
+              className="w-9 h-9 rounded-full object-contain bg-white p-0.5 shadow-sm"
+            />
+            <div>
+              <span className="text-white font-extrabold text-base tracking-tight block leading-tight">AI Interview Portal</span>
+              <span className="text-amber-400 font-semibold text-[10px] tracking-wide uppercase">St. Joseph's College of Engg</span>
             </div>
-            <span className="text-white font-black text-lg tracking-tight">AI Interview Agent</span>
           </Link>
         </div>
 
         <div className="relative z-10 space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#EAB308]/30 bg-[#EAB308]/10">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#EAB308]" />
-            <span className="text-[#EAB308] text-xs font-semibold tracking-wider uppercase">AI-Powered Platform</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#EAB308]/40 bg-[#EAB308]/10 backdrop-blur-xs">
+            <span className="w-2 h-2 rounded-full bg-[#EAB308] animate-pulse" />
+            <span className="text-[#EAB308] text-xs font-bold tracking-wider uppercase">Official Placement & AI Assessment</span>
           </div>
           <h1 className="text-4xl font-black text-white leading-tight">
             Prepare smarter.<br />
             <span className="text-[#EAB308]">Interview better.</span>
           </h1>
-          <p className="text-gray-400 text-base leading-relaxed max-w-sm">
-            Adaptive voice interviews, real-time coaching, and evidence-grounded feedback — built for placement success.
+          <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
+            AI-driven adaptive mock interviews, formal proctored coding assessments, and institutional placement analytics.
           </p>
         </div>
 
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#DC2626]/20 border border-[#DC2626]/30 flex items-center justify-center">
-            <span className="text-[#DC2626] text-xs font-bold">SJ</span>
+        <div className="relative z-10 flex items-center gap-3 pt-4 border-t border-white/10">
+          <img
+            src="/college-logo.png"
+            alt="St. Joseph's College of Engineering"
+            className="w-8 h-8 rounded-full object-contain bg-white p-0.5"
+          />
+          <div>
+            <p className="text-white text-xs font-bold">St. Joseph's College of Engineering</p>
+            <p className="text-gray-400 text-[11px]">Department of Placement & Training</p>
           </div>
-          <p className="text-gray-500 text-sm">St. Joseph's College of Engineering</p>
         </div>
       </div>
 
@@ -97,11 +113,21 @@ const LoginPage: React.FC = () => {
       <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-12">
         {/* Mobile logo */}
         <div className="lg:hidden mb-8">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#DC2626] flex items-center justify-center">
-              <Mic size={16} className="text-white" />
+          <Link to="/" className="flex items-center gap-3">
+            <img
+              src="/app-logo.jpg"
+              alt="AI Interview Portal"
+              className="w-9 h-9 rounded-xl object-cover border border-gray-100 shadow-sm"
+            />
+            <img
+              src="/college-logo.png"
+              alt="St. Joseph's College of Engineering"
+              className="w-8 h-8 rounded-full object-contain bg-white border border-amber-200 p-0.5"
+            />
+            <div>
+              <span className="text-[#111827] font-black text-sm block leading-tight">AI Interview Portal</span>
+              <span className="text-[#92400E] font-semibold text-[10px]">St. Joseph's College of Engg</span>
             </div>
-            <span className="text-[#111827] font-black text-base">AI Interview Agent</span>
           </Link>
         </div>
 
@@ -177,27 +203,36 @@ const LoginPage: React.FC = () => {
             </Link>
           </p>
 
-          {/* Dev bypass for local testing */}
-          {(import.meta as any).env?.DEV && (
-            <div className="mt-6 pt-6 border-t border-gray-100">
-              <p className="text-xs text-gray-400 text-center mb-3">Dev: quick access</p>
-              <div className="flex gap-2">
-                {[
-                  { label: 'Candidate', email: 'candidate@dev.example.com', pwd: 'Test1234!', hint: '→ /interview' },
-                  { label: 'Faculty', email: 'faculty@dev.example.com', pwd: 'Test1234!', hint: '→ /dashboard' },
-                  { label: 'Admin', email: 'admin@dev.example.com', pwd: 'Test1234!', hint: '→ /dashboard' },
-                ].map(({ label, email: e, pwd, hint }) => (
-                  <button key={label} type="button"
-                    onClick={() => { setEmail(e); setPassword(pwd); setTimeout(() => document.querySelector<HTMLFormElement>('form')?.requestSubmit(), 50); }}
-                    className="flex-1 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500
-                      hover:border-[#DC2626]/30 hover:text-[#DC2626] transition-colors">
-                    <div>{label}</div>
-                    <div className="text-[10px] opacity-60">{hint}</div>
-                  </button>
-                ))}
-              </div>
+          {/* Demo Personas for Quick Access */}
+          <div className="mt-6 pt-5 border-t border-gray-100">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider text-center mb-2.5">
+              Select Demo Persona (1-Click Login)
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'Candidate', email: 'candidate@dev.example.com', pwd: 'Test1234!', role: 'Student' },
+                { label: 'Faculty', email: 'faculty@dev.example.com', pwd: 'Test1234!', role: 'Staff' },
+                { label: 'Admin', email: 'admin@dev.example.com', pwd: 'Test1234!', role: 'Officer' },
+              ].map(({ label, email: e, pwd, role }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => {
+                    setEmail(e);
+                    setPassword(pwd);
+                    setTimeout(() => document.querySelector<HTMLFormElement>('form')?.requestSubmit(), 50);
+                  }}
+                  className="p-2 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white hover:border-[#DC2626]/40 hover:shadow-xs transition-all text-center group cursor-pointer"
+                >
+                  <div className="text-xs font-bold text-gray-900 group-hover:text-[#DC2626] transition-colors">{label}</div>
+                  <div className="text-[10px] text-gray-500 font-medium">{role}</div>
+                </button>
+              ))}
             </div>
-          )}
+            <p className="text-[10px] text-center text-gray-400 mt-2">
+              Default password: <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-600 font-mono">Test1234!</code>
+            </p>
+          </div>
         </div>
       </div>
     </div>

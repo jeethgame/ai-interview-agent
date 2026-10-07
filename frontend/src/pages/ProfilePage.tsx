@@ -1,5 +1,5 @@
-import React, { useState, lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { User, FileText, History, BarChart3, Settings, ChevronRight, UploadCloud, CheckCircle } from 'lucide-react';
@@ -14,7 +14,15 @@ type Tab = 'account' | 'resume' | 'history' | 'scorecard';
 const ProfilePage: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>('account');
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabParam && ['account', 'resume', 'history', 'scorecard'].includes(tabParam) ? tabParam : 'account');
+
+  useEffect(() => {
+    if (tabParam && ['account', 'resume', 'history', 'scorecard'].includes(tabParam)) {
+      setTab(tabParam);
+    }
+  }, [tabParam]);
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeLoaded, setResumeLoaded] = useState(false);
 

@@ -40,15 +40,17 @@ const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
   // Role-aware nav links
   const navLinks = isAuthenticated ? [
     ...(isCandidate ? [
-      { to: '/home', label: 'Dashboard', icon: <LayoutDashboard size={14} /> },
+      { to: '/home', label: 'Home', icon: <LayoutDashboard size={14} /> },
+      { to: '/interview', label: 'AI Mock Interview', icon: <Mic size={14} /> },
+      { to: '/coding', label: 'Coding Arena', icon: <Code2 size={14} /> },
+      { to: '/profile?tab=scorecard', label: 'Scorecard', icon: <User size={14} /> },
     ] : []),
     ...((isFaculty || isAdmin) ? [
       { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={14} /> },
     ] : []),
   ] : [
-    { to: '/#hero-section',     label: 'Home',       icon: null },
-    { to: '/#config-section',   label: 'Practice',   icon: null },
-    { to: '/#features-section', label: 'How it Works', icon: null },
+    { to: '/#hero-section',     label: 'Home',         icon: null },
+    { to: '/#features-section', label: 'Capabilities', icon: null },
   ];
 
   const handleNavClick = (to: string) => {
@@ -68,14 +70,24 @@ const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
     <header className="sticky top-0 z-40 w-full bg-white border-b border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-8 h-16">
 
-        {/* Brand */}
-        <Link to={isAuthenticated ? (isCandidate ? '/home' : '/dashboard') : '/'} className="flex items-center gap-2.5 group select-none">
-          <div className="w-8 h-8 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-            <Mic size={16} className="text-white" />
-          </div>
-          <div>
-            <div className="text-[13px] font-black text-[#111827] leading-tight tracking-tight">AI Interview Agent</div>
-            <div className="text-[9px] text-[#6B7280] font-medium tracking-wider uppercase leading-none">St. Joseph's CE</div>
+        {/* Brand & Logos */}
+        <Link to={isAuthenticated ? (isCandidate ? '/home' : '/dashboard') : '/'} className="flex items-center gap-3 group select-none">
+          <img
+            src="/app-logo.jpg"
+            alt="AI Interview Portal"
+            className="w-9 h-9 rounded-xl object-cover border border-gray-100 shadow-sm group-hover:shadow-md transition-shadow"
+          />
+          <div className="h-7 w-[1px] bg-gray-200 hidden sm:block" />
+          <div className="flex items-center gap-2">
+            <img
+              src="/college-logo.png"
+              alt="St. Joseph's College of Engineering"
+              className="w-8 h-8 rounded-full object-contain bg-white border border-amber-200 p-0.5 shadow-xs"
+            />
+            <div>
+              <div className="text-[13px] font-extrabold text-[#111827] leading-tight tracking-tight">AI Interview Portal</div>
+              <div className="text-[9px] text-[#92400E] font-semibold tracking-wider uppercase leading-none">St. Joseph's College of Engg</div>
+            </div>
           </div>
         </Link>
 
@@ -84,10 +96,10 @@ const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
           <nav className="flex items-center gap-1">
             {navLinks.map(link => (
               <button key={link.to} onClick={() => handleNavClick(link.to)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  isActive(link.to) && !link.to.startsWith('/#')
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  isActive(link.to.split('?')[0]) && !link.to.startsWith('/#')
                     ? 'text-[#DC2626] bg-red-50'
-                    : 'text-[#6B7280] hover:text-[#111827] hover:bg-gray-50'
+                    : 'text-[#4B5563] hover:text-[#111827] hover:bg-gray-50'
                 }`}>
                 {link.icon}{link.label}
               </button>
