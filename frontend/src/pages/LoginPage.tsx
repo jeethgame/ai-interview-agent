@@ -35,13 +35,14 @@ const LoginPage: React.FC = () => {
       await login(email, password);
       // redirect handled by useEffect above
     } catch (err: any) {
-      let detailMsg = 'Invalid email or password.';
+      // handleResponse throws Error(message) — not Axios-style err.response.data
+      const msg = err?.message || '';
+      let detailMsg = msg || 'Login failed. Please try again.';
+      // Axios-style fallback (if ever used)
       const d = err?.response?.data?.detail;
-      if (typeof d === 'string') {
-        detailMsg = d;
-      } else if (Array.isArray(d) && d.length > 0) {
-        detailMsg = d.map((item: any) => item.msg || item.message || JSON.stringify(item)).join(', ');
-      }
+      if (typeof d === 'string') detailMsg = d;
+      else if (Array.isArray(d) && d.length > 0)
+        detailMsg = d.map((i: any) => i.msg || i.message || JSON.stringify(i)).join(', ');
       setError(detailMsg);
     } finally {
       setLoading(false);
