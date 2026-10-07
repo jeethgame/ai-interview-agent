@@ -297,15 +297,14 @@ async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
     try:
         from sqlalchemy import text
 
-        from backend.database import get_db
-        async for db in get_db():
+        from backend.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
             await db.execute(text(
                 "INSERT INTO platform_users (id, email, name, role, auth_provider, data_consent_given, created_at, updated_at) "
                 "VALUES (:id, :email, :name, :role, 'mock', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
                 "ON CONFLICT (id) DO UPDATE SET name = :name, role = :role, email = :email, updated_at = CURRENT_TIMESTAMP"
             ), {"id": user_id, "email": email, "name": name, "role": role})
             await db.commit()
-            break
     except Exception as e:
         logger.error(f"platform_users upsert failed: {type(e).__name__}: {e}")
 

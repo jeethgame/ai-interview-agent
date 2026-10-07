@@ -14,46 +14,30 @@ const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:800
 
 interface AssignedTest {
   id: string;
+  exam_id?: string;
   title: string;
   company?: string;
   topic: string;
   duration_minutes: number;
   deadline?: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'expired';
+  status: 'pending' | 'in_progress' | 'completed' | 'expired' | 'disqualified';
   difficulty: 'Easy' | 'Medium' | 'Hard';
   problem_count: number;
+  score?: number | null;
 }
 
 interface AssignedInterview {
   id: string;
+  drive_id?: string;
   role: string;
   company?: string;
   style: string;
   duration_minutes: number;
   deadline?: string;
   status: 'pending' | 'completed';
-  score?: number;
+  score?: number | null;
+  rubric_band?: string | null;
 }
-
-interface Stats {
-  interviews_completed: number;
-  avg_score: number | null;
-  tests_pending: number;
-  streak_days: number;
-}
-
-// ── Mock data for now (replace with real API when endpoints ready) ─────────
-const MOCK_TESTS: AssignedTest[] = [
-  { id: 'exam-001', title: 'TCS Digital — DSA Round 1', company: 'TCS', topic: 'Arrays & Strings', duration_minutes: 60, deadline: '2026-10-02T18:00:00', status: 'pending', difficulty: 'Medium', problem_count: 3 },
-  { id: 'exam-002', title: 'Infosys SP — Python Basics', company: 'Infosys', topic: 'Python', duration_minutes: 45, deadline: '2026-10-05T10:00:00', status: 'pending', difficulty: 'Easy', problem_count: 2 },
-  { id: 'exam-003', title: 'Zoho — Data Structures', company: 'Zoho', topic: 'Linked Lists', duration_minutes: 90, deadline: '2026-09-28T09:00:00', status: 'completed', difficulty: 'Hard', problem_count: 4 },
-];
-
-const MOCK_INTERVIEWS: AssignedInterview[] = [
-  { id: 'int-001', role: 'Software Engineer', company: 'Wipro', style: 'Technical', duration_minutes: 30, deadline: '2026-10-03T14:00:00', status: 'pending' },
-  { id: 'int-002', role: 'Backend Developer', company: 'HCL', style: 'Formal', duration_minutes: 20, deadline: '2026-10-06T11:00:00', status: 'pending' },
-  { id: 'int-003', role: 'Full Stack Developer', company: 'Cognizant', style: 'Technical', duration_minutes: 30, status: 'completed', score: 78 },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -75,6 +59,7 @@ const diffColor = (d: string) =>
 const statusBadge = (s: string) =>
   s === 'completed' ? 'text-green-700 bg-green-50 border-green-200' :
   s === 'expired'   ? 'text-gray-500 bg-gray-50 border-gray-200' :
+  s === 'disqualified' ? 'text-red-700 bg-red-50 border-red-200' :
   s === 'in_progress' ? 'text-blue-700 bg-blue-50 border-blue-200' :
   'text-[#92400E] bg-[#FEF3C7] border-[#EAB308]/40';
 
@@ -98,11 +83,12 @@ const TestCard: React.FC<{ test: AssignedTest }> = ({ test }) => {
   const navigate = useNavigate();
   const dl = relativeDate(test.deadline);
   const isDone = test.status === 'completed';
+  const isDisqualified = test.status === 'disqualified';
   const isExpired = test.status === 'expired' || (dl?.urgent && dl?.label === 'Expired');
 
   return (
     <div className={`bg-white rounded-2xl border border-gray-200 border-b-[3px] p-5 transition-all hover:shadow-md ${
-      isDone ? 'border-b-green-400 opacity-75' : isExpired ? 'border-b-gray-300' : 'border-b-[#EAB308] hover:-translate-y-0.5'
+      isDone ? 'border-b-green-400 opacity-90' : isDisqualified ? 'border-b-red-400' : isExpired ? 'border-b-gray-300' : 'border-b-[#EAB308] hover:-translate-y-0.5'
     }`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
@@ -117,15 +103,24 @@ const TestCard: React.FC<{ test: AssignedTest }> = ({ test }) => {
             </span>
           </div>
           <h3 className="text-sm font-bold text-[#111827] leading-tight">{test.title}</h3>
-          <p className="text-xs text-[#6B7280] mt-0.5">{test.topic} · {test.problem_count} problems · {test.duration_minutes} min</p>
+          <p className="text-xs text-[#6B7280] mt-0.5">{test.topic} · {test.duration_minutes} min</p>
         </div>
-        <span className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg border capitalize ${statusBadge(test.status)}`}>
-          {test.status.replace('_', ' ')}
-        </span>
+        <div className="text-right shrink-0">
+          {isDone && test.score !== undefined && test.score !== null ? (
+            <div>
+              <span className="text-base font-black text-gray-900">{test.score}/100</span>
+              <p className="text-[10px] text-green-600 font-bold">Passed</p>
+            </div>
+          ) : (
+            <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg border capitalize ${statusBadge(test.status)}`}>
+              {test.status.replace('_', ' ')}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
-        {dl && !isDone ? (
+        {dl && !isDone && !isDisqualified ? (
           <div className={`flex items-center gap-1 text-xs font-semibold ${dl.urgent ? 'text-[#DC2626]' : 'text-[#6B7280]'}`}>
             {dl.urgent && <AlertCircle size={12} />}
             <Clock size={11} /> {dl.label}
@@ -134,10 +129,14 @@ const TestCard: React.FC<{ test: AssignedTest }> = ({ test }) => {
           <div className="flex items-center gap-1 text-xs font-semibold text-green-600">
             <CheckCircle2 size={12} /> Completed
           </div>
+        ) : isDisqualified ? (
+          <div className="flex items-center gap-1 text-xs font-semibold text-red-600">
+            <AlertCircle size={12} /> Disqualified
+          </div>
         ) : <div />}
 
-        {!isDone && !isExpired && (
-          <button onClick={() => navigate(`/exam/${test.id}`)}
+        {!isDone && !isExpired && !isDisqualified && (
+          <button onClick={() => navigate(`/exam/${test.exam_id || test.id}`)}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-sm hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)]">
             <Play size={11} /> Attempt <ChevronRight size={11} />
           </button>
@@ -154,7 +153,7 @@ const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }
 
   return (
     <div className={`bg-white rounded-2xl border border-gray-200 border-b-[3px] p-5 transition-all hover:shadow-md ${
-      isDone ? 'border-b-green-400 opacity-75' : 'border-b-[#EAB308] hover:-translate-y-0.5'
+      isDone ? 'border-b-green-400 opacity-90' : 'border-b-[#EAB308] hover:-translate-y-0.5'
     }`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
@@ -164,20 +163,20 @@ const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }
                 {interview.company}
               </span>
             )}
-            <span className="text-[10px] font-semibold text-[#6B7280] bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200">
+            <span className="text-[10px] font-semibold text-[#6B7280] bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200 capitalize">
               {interview.style}
             </span>
           </div>
           <h3 className="text-sm font-bold text-[#111827]">{interview.role}</h3>
           <p className="text-xs text-[#6B7280] mt-0.5">{interview.duration_minutes} min · AI Voice Interview</p>
         </div>
-        {isDone && interview.score !== undefined ? (
+        {isDone && interview.score !== undefined && interview.score !== null ? (
           <div className="shrink-0 text-right">
             <div className="text-lg font-black text-[#111827]">{interview.score}%</div>
-            <div className="text-[10px] text-green-600 font-semibold">Score</div>
+            <div className="text-[10px] text-green-600 font-semibold">{interview.rubric_band || 'Score'}</div>
           </div>
         ) : (
-          <span className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg border ${statusBadge(interview.status)}`}>
+          <span className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg border capitalize ${statusBadge(interview.status)}`}>
             {interview.status}
           </span>
         )}
@@ -196,7 +195,7 @@ const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }
         ) : <div />}
 
         {!isDone && (
-          <button onClick={() => navigate(`/interview?session=${interview.id}`)}
+          <button onClick={() => navigate(`/interview?role=${encodeURIComponent(interview.role)}&style=${encodeURIComponent(interview.style)}&duration=${interview.duration_minutes}`)}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-bold transition-all shadow-sm">
             <Mic size={11} /> Start <ChevronRight size={11} />
           </button>
@@ -209,28 +208,81 @@ const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }
 // ── Main page ─────────────────────────────────────────────────────────────
 
 const CandidateHomePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const navigate = useNavigate();
+
+  const [tests, setTests] = useState<AssignedTest[]>([]);
+  const [interviews, setInterviews] = useState<AssignedInterview[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      try {
+        const token = getToken();
+        const r = await fetch(`${API}/me/assignments`, {
+          headers: { Authorization: token ? `Bearer ${token}` : '' },
+        });
+        if (r.ok) {
+          const data = await r.json();
+          const mappedTests: AssignedTest[] = (data.exams || []).map((e: any) => ({
+            id: e.id,
+            exam_id: e.exam_id,
+            title: e.title || 'Coding Assessment',
+            company: 'Institutional Assessment',
+            topic: e.description || 'Algorithms & Data Structures',
+            duration_minutes: e.duration_minutes || 60,
+            deadline: e.deadline,
+            status: e.status || 'pending',
+            difficulty: 'Medium',
+            problem_count: 3,
+            score: e.score,
+          }));
+
+          const mappedInterviews: AssignedInterview[] = (data.interviews || []).map((i: any) => ({
+            id: i.id,
+            drive_id: i.drive_id,
+            role: i.target_role || i.title || 'Software Engineer',
+            company: i.company || 'Campus Placement',
+            style: i.interview_style || 'Technical',
+            duration_minutes: i.duration_minutes || 30,
+            deadline: i.scheduled_at,
+            status: i.status || 'pending',
+            score: i.readiness_score != null ? Math.round(i.readiness_score) : i.overall_score ? Math.round(i.overall_score * 10) : undefined,
+            rubric_band: i.rubric_band,
+          }));
+
+          setTests(mappedTests);
+          setInterviews(mappedInterviews);
+        }
+      } catch (err) {
+        console.error('Failed to load candidate assignments:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAssignments();
+  }, []);
 
   const firstName = user?.name?.split(' ')[0] || 'Student';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  const pendingTests = MOCK_TESTS.filter(t => t.status === 'pending').length;
-  const pendingInterviews = MOCK_INTERVIEWS.filter(i => i.status === 'pending').length;
-  const completedInterviews = MOCK_INTERVIEWS.filter(i => i.status === 'completed').length;
-  const avgScore = MOCK_INTERVIEWS.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
+  const pendingTests = tests.filter(t => t.status === 'pending').length;
+  const pendingInterviews = interviews.filter(i => i.status === 'pending').length;
+  const completedInterviews = interviews.filter(i => i.status === 'completed').length;
+  const avgScore = interviews.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
 
-  const stats: { icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }[] = [
-    { icon: <BarChart3 size={18} />, label: 'Interviews Done', value: completedInterviews, sub: 'this semester', color: '#DC2626' },
-    { icon: <Star size={18} />, label: 'Avg Score', value: completedInterviews ? `${Math.round(avgScore)}%` : '—', sub: 'across sessions', color: '#EAB308' },
-    { icon: <Target size={18} />, label: 'Tests Pending', value: pendingTests + pendingInterviews, sub: 'due this week', color: '#8B5CF6' },
+  const stats = [
+    { icon: <BarChart3 size={18} />, label: 'Interviews Done', value: completedInterviews, sub: 'total completed', color: '#DC2626' },
+    { icon: <Star size={18} />, label: 'Avg Readiness', value: completedInterviews ? `${Math.round(avgScore)}%` : '—', sub: 'across evaluations', color: '#EAB308' },
+    { icon: <Target size={18} />, label: 'Tests Pending', value: pendingTests + pendingInterviews, sub: 'action items', color: '#8B5CF6' },
     { icon: <Flame size={18} />, label: 'Streak', value: '3 days', sub: 'keep it up!', color: '#F97316' },
   ];
 
   const urgentItems = [
-    ...MOCK_TESTS.filter(t => t.status === 'pending').map(t => ({ ...t, type: 'test' as const })),
-    ...MOCK_INTERVIEWS.filter(i => i.status === 'pending').map(i => ({ ...i, type: 'interview' as const })),
+    ...tests.filter(t => t.status === 'pending').map(t => ({ ...t, type: 'test' as const })),
+    ...interviews.filter(i => i.status === 'pending').map(i => ({ ...i, type: 'interview' as const })),
   ].filter(item => {
     const dl = relativeDate((item as any).deadline);
     return dl && !dl.label.includes('Expired');
@@ -240,7 +292,7 @@ const CandidateHomePage: React.FC = () => {
     <div className="min-h-screen bg-[#FAFAFA]">
       <Header />
 
-      {/* Hero greeting strip — uses the landing page yellow gradient */}
+      {/* Hero greeting strip */}
       <div className="relative overflow-hidden px-4 sm:px-8 py-8"
         style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #FEF9E7 50%, #FEF3C7 100%)' }}>
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
@@ -249,12 +301,11 @@ const CandidateHomePage: React.FC = () => {
             <h1 className="text-2xl sm:text-3xl font-black text-[#111827]">{firstName} 👋</h1>
             <p className="text-sm text-[#6B7280] mt-1">
               {pendingTests + pendingInterviews > 0
-                ? `You have ${pendingTests + pendingInterviews} pending assignment${pendingTests + pendingInterviews > 1 ? 's' : ''} this week.`
-                : 'All caught up! Start a practice session.'}
+                ? `You have ${pendingTests + pendingInterviews} pending assignment${pendingTests + pendingInterviews > 1 ? 's' : ''}.`
+                : 'All caught up! Practice anytime with the AI interviewer or coding arena.'}
             </p>
           </div>
         </div>
-        {/* Subtle decorative circles matching landing page aesthetic */}
         <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-[#EAB308]/10 blur-xl" />
         <div className="absolute right-16 bottom-0 w-20 h-20 rounded-full bg-[#DC2626]/5 blur-lg" />
       </div>
@@ -271,7 +322,7 @@ const CandidateHomePage: React.FC = () => {
           <div className="bg-[#FEF3C7] border border-[#EAB308]/50 rounded-2xl p-4 flex items-center gap-3">
             <Bell size={16} className="text-[#92400E] shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-[#92400E]">Coming up soon</p>
+              <p className="text-sm font-bold text-[#92400E]">Upcoming Assignment</p>
               <p className="text-xs text-[#92400E]/80 truncate">
                 {urgentItems.map(i => (i as any).title || (i as any).role).join(' · ')}
               </p>
@@ -288,17 +339,28 @@ const CandidateHomePage: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Code2 size={16} className="text-[#DC2626]" />
-                <h2 className="text-sm font-black text-[#111827]">Coding Tests</h2>
+                <h2 className="text-sm font-black text-[#111827]">Assigned Coding Tests</h2>
                 <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {MOCK_TESTS.filter(t => t.status === 'pending').length} pending
+                  {pendingTests} pending
                 </span>
               </div>
               <Link to="/coding" className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-0.5 transition-colors">
-                Practice <ArrowRight size={12} />
+                Practice Arena <ArrowRight size={12} />
               </Link>
             </div>
             <div className="space-y-3">
-              {MOCK_TESTS.map(test => <TestCard key={test.id} test={test} />)}
+              {loading ? (
+                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-100">
+                  Loading tests…
+                </div>
+              ) : tests.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-200">
+                  <p className="text-sm font-medium">No coding tests assigned yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Tests assigned by your faculty or administrator will appear here.</p>
+                </div>
+              ) : (
+                tests.map(test => <TestCard key={test.id} test={test} />)
+              )}
             </div>
           </section>
 
@@ -307,14 +369,28 @@ const CandidateHomePage: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Mic size={16} className="text-[#DC2626]" />
-                <h2 className="text-sm font-black text-[#111827]">AI Interviews</h2>
+                <h2 className="text-sm font-black text-[#111827]">Assigned AI Interviews</h2>
                 <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {MOCK_INTERVIEWS.filter(i => i.status === 'pending').length} pending
+                  {pendingInterviews} pending
                 </span>
               </div>
+              <Link to="/interview" className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-0.5 transition-colors">
+                Free Mock <ArrowRight size={12} />
+              </Link>
             </div>
             <div className="space-y-3">
-              {MOCK_INTERVIEWS.map(interview => <InterviewCard key={interview.id} interview={interview} />)}
+              {loading ? (
+                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-100">
+                  Loading interviews…
+                </div>
+              ) : interviews.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-200">
+                  <p className="text-sm font-medium">No placement interviews assigned yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Mock drives scheduled for your cohort will appear here.</p>
+                </div>
+              ) : (
+                interviews.map(interview => <InterviewCard key={interview.id} interview={interview} />)
+              )}
             </div>
           </section>
         </div>

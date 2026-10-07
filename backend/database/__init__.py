@@ -24,6 +24,7 @@ _AsyncSessionLocal = async_sessionmaker(
     bind=_engine, class_=AsyncSession,
     expire_on_commit=False, autocommit=False, autoflush=False,
 )
+AsyncSessionLocal = _AsyncSessionLocal
 
 _qb_engine = create_async_engine(_qb_url, echo=False, pool_pre_ping=True) if _qb_url else None
 _QuestionBankSessionLocal = (
@@ -92,4 +93,4 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS ix_scorecard_user ON candidate_scorecards(user_id)"
         ))
 
-__all__ = ["Base", "DatabaseManager", "get_db", "get_question_bank_db", "init_db"]
+__all__ = ["AsyncSessionLocal", "Base", "DatabaseManager", "get_db", "get_question_bank_db", "init_db"]

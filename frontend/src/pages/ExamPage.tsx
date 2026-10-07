@@ -197,14 +197,14 @@ const SubmittedScreen: React.FC<{ onLeave: () => void }> = ({ onLeave }) => (
   </div>
 );
 
-// ── Live Exam UI ──────────────────────────────────────────────────────────
 const LiveExam: React.FC<{
   exam: typeof MOCK_PROBLEM;
   examId: string;
   userId: string;
+  token?: string;
   infractionCount: number;
   onSubmit: () => void;
-}> = ({ exam, examId, userId, infractionCount, onSubmit }) => {
+}> = ({ exam, examId, userId, token, infractionCount, onSubmit }) => {
   const [selectedProblem, setSelectedProblem] = useState(exam.problems[0]);
   const [code, setCode] = useState('# Write your solution here\n\ndef solution():\n    pass\n');
   const [language, setLanguage] = useState('python');
@@ -224,8 +224,11 @@ const LiveExam: React.FC<{
     setRunning(true);
     setOutput(null);
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       const r = await fetch(`${API}/execution/run`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers,
         body: JSON.stringify({ source_code: code, language, stdin: '' }),
       });
       const d = await r.json();
@@ -341,13 +344,37 @@ const LiveExam: React.FC<{
 
 const ExamPage: React.FC = () => {
   const { examId = 'exam-001' } = useParams();
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>('instructions');
+  const [examData, setExamData] = useState(MOCK_PROBLEM);
+
+  React.useEffect(() => {
+    const fetchExam = async () => {
+      try {
+        const token = getToken();
+        const r = await fetch(`${API}/exams/${examId}`, {
+          headers: { Authorization: token ? `Bearer ${token}` : '' },
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setExamData(prev => ({
+            ...prev,
+            title: d.title || prev.title,
+            duration_minutes: d.duration_minutes || prev.duration_minutes,
+            max_infractions: d.max_infractions || prev.max_infractions,
+          }));
+        }
+      } catch { }
+    };
+    if (examId && examId !== 'exam-001') {
+      fetchExam();
+    }
+  }, [examId]);
 
   const { infractionCount, requestFullscreen } = useSEBGuard({
     examId,
-    maxInfractions: MOCK_PROBLEM.max_infractions,
+    maxInfractions: examData.max_infractions,
     onDisqualified: () => setPhase('disqualified'),
     onInfraction: () => {}, // count shown in live exam header
   });
@@ -357,18 +384,40 @@ const ExamPage: React.FC = () => {
     setPhase('exam');
   };
 
-  if (phase === 'instructions') return <InstructionsScreen exam={MOCK_PROBLEM} onNext={() => setPhase('preflight')} onBack={() => navigate('/home')} />;
+  const handleSubmitExam = async () => {
+    try {
+      const token = getToken();
+      await fetch(`${API}/exams/${examId}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          candidate_id: user?.id || 'candidate',
+          answers: {},
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to submit exam attempt:', e);
+    } finally {
+      setPhase('submitted');
+    }
+  };
+
+  if (phase === 'instructions') return <InstructionsScreen exam={examData} onNext={() => setPhase('preflight')} onBack={() => navigate('/home')} />;
   if (phase === 'preflight') return <PreflightScreen onStart={handleStart} onBack={() => setPhase('instructions')} />;
   if (phase === 'disqualified') return <DisqualifiedScreen onLeave={() => navigate('/home')} />;
   if (phase === 'submitted') return <SubmittedScreen onLeave={() => navigate('/home')} />;
 
   return (
     <LiveExam
-      exam={MOCK_PROBLEM}
+      exam={examData}
       examId={examId}
       userId={user?.id || 'candidate'}
+      token={getToken() || undefined}
       infractionCount={infractionCount}
-      onSubmit={() => setPhase('submitted')}
+      onSubmit={handleSubmitExam}
     />
   );
 };

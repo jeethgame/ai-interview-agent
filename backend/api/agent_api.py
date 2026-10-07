@@ -169,8 +169,19 @@ def create_agent_api(app):
                 rubric_band=summary.get("rubric_band", "Developing"),
                 role=getattr(session_manager, "session_config", {}).job_role if hasattr(session_manager, "session_config") else "",
             )
+
+            from sqlalchemy import text
+
+            from backend.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                await db.execute(text("""
+                    UPDATE drive_allocations
+                    SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+                    WHERE user_id = :uid AND status = 'pending'
+                """), {"uid": user_id})
+                await db.commit()
         except Exception as e:
-            logger.debug(f"Scorecard update skipped: {type(e).__name__}")
+            logger.debug(f"Scorecard update skipped: {type(e).__name__}: {e}")
 
     @router.post("/session", response_model=SessionResponse)
     async def create_session(

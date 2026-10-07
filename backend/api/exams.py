@@ -195,6 +195,14 @@ async def log_exam_infraction(
 
     if attempt.infraction_count >= exam.max_infractions:
         attempt.status = "DISQUALIFIED"
+        try:
+            from sqlalchemy import text
+            await db.execute(
+                text("UPDATE exam_assignments SET status = 'disqualified', completed_at = CURRENT_TIMESTAMP WHERE exam_id = :exam_id AND user_id = :cid"),
+                {"exam_id": exam_id, "cid": candidate_id}
+            )
+        except Exception:
+            pass
 
     await db.flush()
 
@@ -232,6 +240,16 @@ async def submit_exam_attempt(
     attempt.submitted_at = datetime.utcnow()
     attempt.score = 85  # baseline score calculated from passed test cases
     await db.flush()
+
+    try:
+        from sqlalchemy import text
+        cid = req.candidate_id or user.get("id")
+        await db.execute(
+            text("UPDATE exam_assignments SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE exam_id = :exam_id AND user_id = :cid"),
+            {"exam_id": exam_id, "cid": cid}
+        )
+    except Exception:
+        pass
 
     return AttemptResponse(
         id=attempt.id,
