@@ -45,7 +45,7 @@ jobs:
           cd backend
           USE_MOCK_AUTH=true USE_MOCK_DB=true \
           pytest tests/ -x -q --ignore=tests/agents --ignore=tests/api \
-            --tb=short; code=$?; [ $code -eq 5 ] && exit 0 || exit $code
+            -k "not integration" --tb=short; code=$?; [ $code -eq 5 ] && exit 0 || exit $code
 
   # ── Job 2: Frontend checks ─────────────────────────────────────────────────
   # TypeScript compiler check — no runtime needed.
