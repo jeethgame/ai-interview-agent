@@ -21,19 +21,15 @@ export const ExamPortal: React.FC<ExamPortalProps> = ({ examId, candidateId }) =
     },
   });
 
-  // --- legacy useEffect removed --- useSEBGuard handles all proctoring ---
-  // Dummy placeholder for removed useEffect
+  // Countdown timer
   React.useEffect(() => {
     if (status !== "IN_PROGRESS") return;
 
-    // Countdown timer
     const timer = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
 
     return () => {
-      window.removeEventListener("blur", handleBlur);
-      document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(timer);
     };
   }, [examId, candidateId, status]);

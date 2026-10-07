@@ -124,7 +124,7 @@ const LoginPage: React.FC = () => {
               <label className="text-sm font-semibold text-[#111827]">Email address</label>
               <input
                 type="text" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com or candidate" autoComplete="email" required
+                placeholder="e.g., student@stjosephs.ac.in" autoComplete="email" required
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-[#111827]
                   placeholder-gray-400 bg-white focus:outline-none focus:border-[#DC2626]
                   focus:ring-2 focus:ring-[#DC2626]/10 transition-all"

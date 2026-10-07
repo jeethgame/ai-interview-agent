@@ -32,7 +32,7 @@ export function DevTextInput({ onSendMessage, isLoading }: DevTextInputProps) {
               type="text"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Type your response (dev mode)..."
+              placeholder="Type your response..."
               autoFocus
               disabled={isLoading}
               className="flex-1 bg-transparent text-[13px] text-[#111827] placeholder-[#9CA3AF] outline-none px-1 py-1"
@@ -51,8 +51,8 @@ export function DevTextInput({ onSendMessage, isLoading }: DevTextInputProps) {
       {/* Toggle button - rendered inside control dock by parent */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        title="Toggle dev text input"
-        aria-label="Toggle dev text input"
+        title="Toggle text input"
+        aria-label="Toggle text input"
         className={`w-10 h-[38px] rounded-lg border flex items-center justify-center cursor-pointer transition-all duration-150 ${
           isOpen
             ? 'border-[#DC2626]/50 text-[#DC2626] bg-[#DC2626]/10'

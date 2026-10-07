@@ -134,7 +134,7 @@ const RegisterPage: React.FC = () => {
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-[#111827]">Full name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="Prajeeth Kumar" autoComplete="name" required
+                placeholder="Your full name" autoComplete="name" required
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-[#111827]
                   placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2
                   focus:ring-[#DC2626]/10 transition-all" />
@@ -144,7 +144,7 @@ const RegisterPage: React.FC = () => {
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-[#111827]">Email address</label>
               <input type="text" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com" autoComplete="email" required
+                placeholder="e.g., student@stjosephs.ac.in" autoComplete="email" required
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-[#111827]
                   placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2
                   focus:ring-[#DC2626]/10 transition-all" />
