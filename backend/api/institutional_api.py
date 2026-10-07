@@ -18,20 +18,28 @@ Endpoints:
     POST /orgs/{org_id}/drives/{id}/allocate  allocate candidates to drive
     GET  /orgs/{org_id}/drives/{id}/results   drive results/scores
 
+  Exam Assignment
+    GET  /orgs/{org_id}/exams                          list all exams
+    POST /orgs/{org_id}/exams/{id}/assign              assign exam to users (by IDs, emails, or cohorts)
+    GET  /orgs/{org_id}/exams/{id}/assignments          list exam assignments
+    POST /orgs/{org_id}/exams/{id}/assign/csv          bulk assign via CSV upload
+
   Faculty Analytics
     GET  /orgs/{org_id}/analytics/overview    cohort-level performance
     GET  /orgs/{org_id}/analytics/candidates  per-candidate summary
 """
 
+import csv
+import io
 import uuid
 import logging
 from typing import Optional, List
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from pydantic import BaseModel
 
-from backend.api.auth_api import get_current_user
+from backend.api.auth_api import get_current_user, require_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orgs", tags=["institutional"])
@@ -104,10 +112,8 @@ async def _db():
 @router.post("/", response_model=OrgResponse)
 async def create_org(
     body: OrgCreate,
-    user: dict = Depends(get_current_user),
+    user: dict = require_role("admin", "faculty"),
 ):
-    if user.get("payload", {}).get("role", "candidate") not in ("admin", "faculty"):
-        raise HTTPException(status_code=403, detail="Admin or faculty role required")
     try:
         from sqlalchemy import text
         db = await _db()
@@ -422,6 +428,148 @@ async def analytics_candidates(
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch candidate analytics")
+
+
+# ── Exam Assignment ──────────────────────────────────────────────────────
+
+class ExamAssignRequest(BaseModel):
+    user_ids: List[str] = []
+    emails: List[str] = []
+    cohort_ids: List[str] = []
+    deadline: Optional[datetime] = None
+
+
+async def _resolve_user_ids(db, user_ids: list, emails: list, cohort_ids: list) -> tuple[set, list]:
+    """Union user IDs from direct IDs, email lookups, and cohort expansion. Returns (resolved_ids, not_found_emails)."""
+    from sqlalchemy import text
+    resolved = set(user_ids)
+    not_found = []
+
+    if emails:
+        placeholders = ", ".join(f":e{i}" for i in range(len(emails)))
+        params = {f"e{i}": e for i, e in enumerate(emails)}
+        r = await db.execute(
+            text(f"SELECT id, email FROM platform_users WHERE email IN ({placeholders})"), params,
+        )
+        found = {row["email"]: str(row["id"]) for row in r.mappings().fetchall()}
+        resolved.update(found.values())
+        not_found = [e for e in emails if e not in found]
+
+    if cohort_ids:
+        placeholders = ", ".join(f":c{i}" for i in range(len(cohort_ids)))
+        params = {f"c{i}": c for i, c in enumerate(cohort_ids)}
+        r = await db.execute(
+            text(f"SELECT user_id FROM cohort_members WHERE cohort_id IN ({placeholders})"), params,
+        )
+        resolved.update(str(row["user_id"]) for row in r.mappings().fetchall())
+
+    return resolved, not_found
+
+
+@router.get("/{org_id}/exams")
+async def list_exams(org_id: str, user: dict = require_role("admin", "faculty")):
+    try:
+        from sqlalchemy import text
+        db = await _db()
+        r = await db.execute(text("""
+            SELECT fe.id, fe.title, fe.description, fe.duration_minutes,
+                   fe.seb_required, fe.is_active, fe.created_at,
+                   COUNT(ea.id) AS assigned_count
+            FROM formal_exams fe
+            LEFT JOIN exam_assignments ea ON ea.exam_id = fe.id
+            GROUP BY fe.id ORDER BY fe.created_at DESC
+        """))
+        return [dict(row) for row in r.mappings().fetchall()]
+    except Exception as e:
+        logger.error(f"list_exams failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list exams")
+
+
+@router.post("/{org_id}/exams/{exam_id}/assign")
+async def assign_exam(
+    org_id: str, exam_id: str,
+    body: ExamAssignRequest,
+    user: dict = require_role("admin", "faculty"),
+):
+    try:
+        from sqlalchemy import text
+        db = await _db()
+        resolved, not_found = await _resolve_user_ids(db, body.user_ids, body.emails, body.cohort_ids)
+
+        assigned = 0
+        for uid in resolved:
+            try:
+                await db.execute(text("""
+                    INSERT INTO exam_assignments (id, exam_id, user_id, status, deadline, assigned_at)
+                    VALUES (:id, :exam_id, :user_id, 'pending', :deadline, CURRENT_TIMESTAMP)
+                    ON CONFLICT (exam_id, user_id) DO NOTHING
+                """), {"id": str(uuid.uuid4()), "exam_id": exam_id, "user_id": uid, "deadline": body.deadline})
+                assigned += 1
+            except Exception:
+                pass
+        await db.commit()
+        return {"assigned": assigned, "skipped": len(resolved) - assigned, "not_found_emails": not_found}
+    except Exception as e:
+        logger.error(f"assign_exam failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to assign exam")
+
+
+@router.get("/{org_id}/exams/{exam_id}/assignments")
+async def get_exam_assignments(
+    org_id: str, exam_id: str,
+    user: dict = require_role("admin", "faculty"),
+):
+    try:
+        from sqlalchemy import text
+        db = await _db()
+        r = await db.execute(text("""
+            SELECT pu.id AS user_id, pu.name, pu.email,
+                   ea.status, ea.deadline, ea.assigned_at, ea.completed_at
+            FROM exam_assignments ea
+            JOIN platform_users pu ON pu.id = ea.user_id
+            WHERE ea.exam_id = :exam_id
+            ORDER BY ea.assigned_at DESC
+        """), {"exam_id": exam_id})
+        return [dict(row) for row in r.mappings().fetchall()]
+    except Exception as e:
+        logger.error(f"get_exam_assignments failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch exam assignments")
+
+
+@router.post("/{org_id}/exams/{exam_id}/assign/csv")
+async def assign_exam_csv(
+    org_id: str, exam_id: str,
+    file: UploadFile = File(...),
+    user: dict = require_role("admin", "faculty"),
+):
+    """Bulk assign exam via CSV upload. Expects a column named 'email' or first column as emails."""
+    try:
+        content = (await file.read()).decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(content))
+
+        emails = []
+        if reader.fieldnames and "email" in [f.lower().strip() for f in reader.fieldnames]:
+            email_col = next(f for f in reader.fieldnames if f.lower().strip() == "email")
+            for row in reader:
+                val = row.get(email_col, "").strip()
+                if val and "@" in val:
+                    emails.append(val)
+        else:
+            reader2 = csv.reader(io.StringIO(content))
+            for row in reader2:
+                if row and "@" in row[0].strip():
+                    emails.append(row[0].strip())
+
+        if not emails:
+            raise HTTPException(status_code=400, detail="No valid emails found in CSV")
+
+        body = ExamAssignRequest(emails=emails)
+        return await assign_exam(org_id, exam_id, body, user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"assign_exam_csv failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process CSV")
 
 
 # ── Candidate-facing: my assignments ─────────────────────────────────────

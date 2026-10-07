@@ -17,6 +17,7 @@ import os
 import json
 import logging
 import asyncio
+import uuid
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -133,6 +134,15 @@ async def get_current_user(
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
+def require_role(*roles):
+    """Dependency factory: raises 403 if the authenticated user's role isn't in the allowed set."""
+    async def _check(user: Dict[str, Any] = Depends(get_current_user)):
+        if user.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Insufficient role")
+        return user
+    return Depends(_check)
+
+
 # ── Pydantic models ───────────────────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
@@ -174,6 +184,28 @@ def _mock_role(email: str, explicit_role: Optional[str] = None) -> str:
     if "faculty" in e: return "faculty"
     return "candidate"
 
+def _stable_mock_id(email: str) -> str:
+    """Deterministic user ID from email so the same user gets the same ID across logins."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, email.lower().strip()))
+
+
+async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
+    """Upsert a platform_users row so institutional queries work in mock mode."""
+    try:
+        from backend.database import get_db
+        from sqlalchemy import text
+        async for db in get_db():
+            await db.execute(text(
+                "INSERT INTO platform_users (id, email, name, role, auth_provider, created_at, updated_at) "
+                "VALUES (:id, :email, :name, :role, 'mock', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "ON CONFLICT (email) DO UPDATE SET name = :name, role = :role, updated_at = CURRENT_TIMESTAMP"
+            ), {"id": user_id, "email": email, "name": name, "role": role})
+            await db.commit()
+            break
+    except Exception as e:
+        logger.debug(f"platform_users upsert skipped: {type(e).__name__}: {e}")
+
+
 def _mock_tokens(user_id: str, email: str, name: Optional[str] = None, role: Optional[str] = None) -> AuthTokenResponse:
     import time
     assigned_role = _mock_role(email, role)
@@ -200,8 +232,11 @@ def create_auth_api(app):
     @router.post("/register", response_model=AuthTokenResponse)
     async def register(body: RegisterRequest):
         if USE_MOCK_AUTH:
-            import uuid
-            return _mock_tokens(str(uuid.uuid4()), body.email, body.name, body.role)
+            uid = _stable_mock_id(body.email)
+            display_name = body.name or body.email.split("@")[0]
+            role = _mock_role(body.email, body.role)
+            await _ensure_platform_user(uid, body.email, display_name, role)
+            return _mock_tokens(uid, body.email, display_name, body.role)
         if not _cognito_available():
             raise HTTPException(status_code=503, detail="Auth service not configured")
         try:
@@ -246,8 +281,11 @@ def create_auth_api(app):
     @router.post("/login", response_model=AuthTokenResponse)
     async def login(body: LoginRequest):
         if USE_MOCK_AUTH:
-            import uuid
-            return _mock_tokens(str(uuid.uuid4()), body.email, body.email.split("@")[0])
+            uid = _stable_mock_id(body.email)
+            display_name = body.email.split("@")[0]
+            role = _mock_role(body.email)
+            await _ensure_platform_user(uid, body.email, display_name, role)
+            return _mock_tokens(uid, body.email, display_name)
         if not _cognito_available():
             raise HTTPException(status_code=503, detail="Auth service not configured")
         try:
