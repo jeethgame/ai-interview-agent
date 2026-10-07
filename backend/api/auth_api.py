@@ -12,6 +12,9 @@ Same endpoint contract as before (frontend unchanged):
 When COGNITO_USER_POOL_ID is set, uses Cognito.
 Falls back to mock JWT for local development (USE_MOCK_AUTH=true).
 """
+from sqlalchemy import select
+from backend.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import asyncio
 import json

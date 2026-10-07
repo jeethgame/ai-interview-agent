@@ -11,7 +11,7 @@ const MonacoEditor = lazy(() => import('@/components/team_a/MonacoEditor').then(
 
 type Phase = 'instructions' | 'preflight' | 'exam' | 'disqualified' | 'submitted';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL ?? '';
+const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // Mock problem for now — will come from /api/exams/:id
 const MOCK_PROBLEM = {
@@ -216,10 +216,6 @@ const LiveExam: React.FC<{
     const t = setInterval(() => setTimeLeft(s => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
   }, []);
-
-  React.useEffect(() => {
-    if (timeLeft === 0) onSubmit();
-  }, [timeLeft]);
 
   const fmt = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const urgentTime = timeLeft < 300;

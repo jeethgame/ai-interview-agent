@@ -186,7 +186,7 @@ class InterviewSession(Base):
 # ── 5. interview_questions ─────────────────────────────────────────────────
 
 class InterviewQuestion(Base):
-    __tablename__ = "interview_questions"
+    __tablename__ = "interview_session_questions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False)
@@ -212,7 +212,7 @@ class CandidateAnswer(Base):
     __tablename__ = "candidate_answers"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_questions.id", ondelete="CASCADE"), nullable=False)
+    question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),ForeignKey("interview_session_questions.id", ondelete="CASCADE"),nullable=False)
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False)
     answer_text: Mapped[str | None] = mapped_column(Text)               # stored encrypted via encrypt_field()
     transcript_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending|complete|partial

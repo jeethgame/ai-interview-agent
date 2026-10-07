@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
-import { getMyAssignments } from '@/services/api';
 import {
   Mic, Code2, Clock, CheckCircle2, ChevronRight, AlertCircle,
   TrendingUp, Target, Calendar, Play, BarChart3, Flame,
   BookOpen, Award, ArrowRight, Bell, Star
 } from 'lucide-react';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL ?? '';
+const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -45,14 +44,14 @@ interface Stats {
 
 // ── Mock data for now (replace with real API when endpoints ready) ─────────
 const MOCK_TESTS: AssignedTest[] = [
-  { id: 'exam-001', title: 'TCS Digital — DSA Round 1', company: 'TCS', topic: 'Arrays & Strings', duration_minutes: 60, deadline: '2026-11-15T18:00:00', status: 'pending', difficulty: 'Medium', problem_count: 3 },
-  { id: 'exam-002', title: 'Infosys SP — Python Basics', company: 'Infosys', topic: 'Python', duration_minutes: 45, deadline: '2026-11-20T10:00:00', status: 'pending', difficulty: 'Easy', problem_count: 2 },
-  { id: 'exam-003', title: 'Zoho — Data Structures', company: 'Zoho', topic: 'Linked Lists', duration_minutes: 90, status: 'completed', difficulty: 'Hard', problem_count: 4 },
+  { id: 'exam-001', title: 'TCS Digital — DSA Round 1', company: 'TCS', topic: 'Arrays & Strings', duration_minutes: 60, deadline: '2026-10-02T18:00:00', status: 'pending', difficulty: 'Medium', problem_count: 3 },
+  { id: 'exam-002', title: 'Infosys SP — Python Basics', company: 'Infosys', topic: 'Python', duration_minutes: 45, deadline: '2026-10-05T10:00:00', status: 'pending', difficulty: 'Easy', problem_count: 2 },
+  { id: 'exam-003', title: 'Zoho — Data Structures', company: 'Zoho', topic: 'Linked Lists', duration_minutes: 90, deadline: '2026-09-28T09:00:00', status: 'completed', difficulty: 'Hard', problem_count: 4 },
 ];
 
 const MOCK_INTERVIEWS: AssignedInterview[] = [
-  { id: 'int-001', role: 'Software Engineer', company: 'Wipro', style: 'Technical', duration_minutes: 30, deadline: '2026-11-18T14:00:00', status: 'pending' },
-  { id: 'int-002', role: 'Backend Developer', company: 'HCL', style: 'Formal', duration_minutes: 20, deadline: '2026-11-22T11:00:00', status: 'pending' },
+  { id: 'int-001', role: 'Software Engineer', company: 'Wipro', style: 'Technical', duration_minutes: 30, deadline: '2026-10-03T14:00:00', status: 'pending' },
+  { id: 'int-002', role: 'Backend Developer', company: 'HCL', style: 'Formal', duration_minutes: 20, deadline: '2026-10-06T11:00:00', status: 'pending' },
   { id: 'int-003', role: 'Full Stack Developer', company: 'Cognizant', style: 'Technical', duration_minutes: 30, status: 'completed', score: 78 },
 ];
 
@@ -212,34 +211,15 @@ const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }
 const CandidateHomePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tests, setTests] = useState<AssignedTest[]>(MOCK_TESTS);
-  const [interviews, setInterviews] = useState<AssignedInterview[]>(MOCK_INTERVIEWS);
-
-  useEffect(() => {
-    getMyAssignments().then(data => {
-      if (data.exams?.length || data.interviews?.length) {
-        setTests(data.exams.map(e => ({
-          id: e.exam_id, title: e.title || 'Exam', topic: 'Assigned', company: undefined,
-          duration_minutes: e.duration_minutes || 60, deadline: e.deadline || undefined,
-          status: (e.status as AssignedTest['status']) || 'pending', difficulty: 'Medium', problem_count: 0,
-        })));
-        setInterviews(data.interviews.map(i => ({
-          id: i.session_id || i.id, role: i.target_role || 'Interview', company: i.company || undefined,
-          style: i.interview_style || 'Formal', duration_minutes: i.duration_minutes,
-          deadline: i.scheduled_at || undefined, status: (i.status as AssignedInterview['status']) || 'pending',
-        })));
-      }
-    }).catch(() => {});
-  }, []);
 
   const firstName = user?.name?.split(' ')[0] || 'Student';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  const pendingTests = tests.filter(t => t.status === 'pending').length;
-  const pendingInterviews = interviews.filter(i => i.status === 'pending').length;
-  const completedInterviews = interviews.filter(i => i.status === 'completed').length;
-  const avgScore = interviews.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
+  const pendingTests = MOCK_TESTS.filter(t => t.status === 'pending').length;
+  const pendingInterviews = MOCK_INTERVIEWS.filter(i => i.status === 'pending').length;
+  const completedInterviews = MOCK_INTERVIEWS.filter(i => i.status === 'completed').length;
+  const avgScore = MOCK_INTERVIEWS.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
 
   const stats: { icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }[] = [
     { icon: <BarChart3 size={18} />, label: 'Interviews Done', value: completedInterviews, sub: 'this semester', color: '#DC2626' },
@@ -249,8 +229,8 @@ const CandidateHomePage: React.FC = () => {
   ];
 
   const urgentItems = [
-    ...tests.filter(t => t.status === 'pending').map(t => ({ ...t, type: 'test' as const })),
-    ...interviews.filter(i => i.status === 'pending').map(i => ({ ...i, type: 'interview' as const })),
+    ...MOCK_TESTS.filter(t => t.status === 'pending').map(t => ({ ...t, type: 'test' as const })),
+    ...MOCK_INTERVIEWS.filter(i => i.status === 'pending').map(i => ({ ...i, type: 'interview' as const })),
   ].filter(item => {
     const dl = relativeDate((item as any).deadline);
     return dl && !dl.label.includes('Expired');
@@ -310,7 +290,7 @@ const CandidateHomePage: React.FC = () => {
                 <Code2 size={16} className="text-[#DC2626]" />
                 <h2 className="text-sm font-black text-[#111827]">Coding Tests</h2>
                 <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {tests.filter(t => t.status === 'pending').length} pending
+                  {MOCK_TESTS.filter(t => t.status === 'pending').length} pending
                 </span>
               </div>
               <Link to="/coding" className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-0.5 transition-colors">
@@ -318,7 +298,7 @@ const CandidateHomePage: React.FC = () => {
               </Link>
             </div>
             <div className="space-y-3">
-              {tests.map(test => <TestCard key={test.id} test={test} />)}
+              {MOCK_TESTS.map(test => <TestCard key={test.id} test={test} />)}
             </div>
           </section>
 
@@ -329,12 +309,12 @@ const CandidateHomePage: React.FC = () => {
                 <Mic size={16} className="text-[#DC2626]" />
                 <h2 className="text-sm font-black text-[#111827]">AI Interviews</h2>
                 <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {interviews.filter(i => i.status === 'pending').length} pending
+                  {MOCK_INTERVIEWS.filter(i => i.status === 'pending').length} pending
                 </span>
               </div>
             </div>
             <div className="space-y-3">
-              {interviews.map(interview => <InterviewCard key={interview.id} interview={interview} />)}
+              {MOCK_INTERVIEWS.map(interview => <InterviewCard key={interview.id} interview={interview} />)}
             </div>
           </section>
         </div>

@@ -1,19 +1,18 @@
 import json
-
+from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.models.session import LegacySession as InterviewSession
-from backend.models.session import SessionStage
+from backend.models.session import CodingInterviewSession, SessionStage
 
 router = APIRouter(prefix="/sessions", tags=["Live Interview Room & Session State (Member A3)"])
 
 class ConnectionManager:
     """Manages active live WebSocket connections per interview room."""
     def __init__(self):
-        self.active_rooms: dict[str, list[WebSocket]] = {}
+        self.active_rooms: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, session_id: str, websocket: WebSocket):
         await websocket.accept()
@@ -41,7 +40,7 @@ manager = ConnectionManager()
 
 class StartSessionRequest(BaseModel):
     candidate_id: str
-    role_title: str | None = "Full Stack Software Engineer"
+    role_title: Optional[str] = "Full Stack Software Engineer"
 
 class UpdateStageRequest(BaseModel):
     stage: SessionStage
@@ -66,7 +65,7 @@ async def start_session(req: StartSessionRequest, db: AsyncSession = Depends(get
             "content": f"Hello! Welcome to your interview for the {req.role_title} role. I've reviewed your resume and project claims. Let's begin by having you briefly introduce yourself and the project you're proudest of.",
         }
     ]
-    session = InterviewSession(
+    session = CodingInterviewSession(
         candidate_id=req.candidate_id,
         role_title=req.role_title,
         stage=SessionStage.TECH,
@@ -76,7 +75,7 @@ async def start_session(req: StartSessionRequest, db: AsyncSession = Depends(get
     await db.flush()
 
     return SessionResponse(
-        id=session.id,
+        id=str(session.id),
         candidate_id=session.candidate_id,
         role_title=session.role_title,
         stage=session.stage.value,
@@ -86,12 +85,12 @@ async def start_session(req: StartSessionRequest, db: AsyncSession = Depends(get
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
     """Fetch current interview room state and message history."""
-    session = await db.get(InterviewSession, session_id)
+    session = await db.get(CodingInterviewSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
     return SessionResponse(
-        id=session.id,
+        id=str(session.id),
         candidate_id=session.candidate_id,
         role_title=session.role_title,
         stage=session.stage.value,
@@ -101,7 +100,7 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
 @router.patch("/{session_id}/stage", response_model=SessionResponse)
 async def update_session_stage(session_id: str, req: UpdateStageRequest, db: AsyncSession = Depends(get_db)):
     """Transition the room between assessment stages (TECH -> CODING_TOOL -> EVALUATING)."""
-    session = await db.get(InterviewSession, session_id)
+    session = await db.get(CodingInterviewSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -112,7 +111,7 @@ async def update_session_stage(session_id: str, req: UpdateStageRequest, db: Asy
     await manager.broadcast(session_id, {"type": "STAGE_CHANGED", "stage": req.stage.value})
 
     return SessionResponse(
-        id=session.id,
+        id=str(session.id),
         candidate_id=session.candidate_id,
         role_title=session.role_title,
         stage=session.stage.value,
@@ -122,7 +121,7 @@ async def update_session_stage(session_id: str, req: UpdateStageRequest, db: Asy
 @router.post("/{session_id}/message", response_model=SessionResponse)
 async def post_message(session_id: str, req: PostMessageRequest, db: AsyncSession = Depends(get_db)):
     """Append a message turn to the interview room transcript."""
-    session = await db.get(InterviewSession, session_id)
+    session = await db.get(CodingInterviewSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -135,7 +134,7 @@ async def post_message(session_id: str, req: PostMessageRequest, db: AsyncSessio
     await manager.broadcast(session_id, {"type": "NEW_MESSAGE", "sender": req.sender, "content": req.content})
 
     return SessionResponse(
-        id=session.id,
+        id=str(session.id),
         candidate_id=session.candidate_id,
         role_title=session.role_title,
         stage=session.stage.value,

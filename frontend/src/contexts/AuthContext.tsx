@@ -33,14 +33,7 @@ const ACCESS_TOKEN_KEY = 'aia_access_token';
 const REFRESH_TOKEN_KEY = 'aia_refresh_token';
 const USER_KEY = 'aia_user';
 
-// Empty string = Docker/nginx proxy mode (relative paths); fallback = local dev
-const API_URL = (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhost:8010';
-
-// JWT uses base64url (- and _ instead of + and /); atob() needs standard base64
-const parseJwtPayload = (token: string): Record<string, unknown> => {
-  const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(atob(b64.padEnd(b64.length + (4 - b64.length % 4) % 4, '=')));
-};
+const API_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -62,15 +55,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(updated);
           localStorage.setItem(USER_KEY, JSON.stringify(updated));
         } catch (err: any) {
-          // Only wipe tokens on 401 (invalid/expired token) — not on network errors
-          if (err?.response?.status === 401) {
+          if (err?.response && (err.response.status === 401 || err.response.status === 403)) {
             localStorage.removeItem(ACCESS_TOKEN_KEY);
             localStorage.removeItem(REFRESH_TOKEN_KEY);
             localStorage.removeItem(USER_KEY);
             setUser(null);
             delete axios.defaults.headers.common['Authorization'];
           }
-          // On network error / CORS / timeout: keep stored user, don't force logout
         }
       }
       setIsLoading(false);
@@ -82,13 +73,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const { data } = await axios.post<AuthTokens>(`${API_URL}/auth/register`, { email, password, name, role });
-      // Try to read role from JWT payload (mock auth encodes it there)
-      let jwtRole: UserRole | undefined;
-      try {
-        const payload = parseJwtPayload(data.access_token);
-        if (payload.role) jwtRole = payload.role as UserRole;
-      } catch {}
-      const u: User = { ...data.user, role: jwtRole || data.user.role || role };
+      const u: User = { ...data.user, role: data.user.role || role };
       localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
       localStorage.setItem(USER_KEY, JSON.stringify(u));
@@ -102,12 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const { data } = await axios.post<AuthTokens>(`${API_URL}/auth/login`, { email, password });
-      let jwtRole: UserRole | undefined;
-      try {
-        const payload = parseJwtPayload(data.access_token);
-        if (payload.role) jwtRole = payload.role as UserRole;
-      } catch {}
-      const u: User = { ...data.user, role: jwtRole || data.user.role || 'candidate' };
+      const u: User = { ...data.user, role: data.user.role || 'candidate' };
       localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
       localStorage.setItem(USER_KEY, JSON.stringify(u));
