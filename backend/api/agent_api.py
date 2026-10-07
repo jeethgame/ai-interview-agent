@@ -4,32 +4,30 @@ Refactored for multi-session support with database persistence.
 """
 
 import asyncio
-import logging
-from typing import List, Dict, Any, Optional
-import uuid
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Depends, Path, Request, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from backend.agents.orchestrator import AgentSessionManager
+
 from backend.agents.config_models import SessionConfig
-from backend.services.session_manager import ThreadSafeSessionRegistry
+from backend.agents.orchestrator import AgentSessionManager
 from backend.api.auth_api import get_current_user, get_current_user_optional
 from backend.config import get_logger
-from fastapi.responses import JSONResponse
+from backend.services.session_manager import ThreadSafeSessionRegistry
 
 logger = get_logger(__name__)
 
 class InterviewStartRequest(BaseModel):
     """Request body for starting/configuring the interview."""
-    job_role: Optional[str] = Field("General Role", description="Target job role for the interview")
-    job_description: Optional[str] = Field(None, description="Job description details")
-    resume_content: Optional[str] = Field(None, description="Candidate's resume text")
-    style: Optional[str] = Field("formal", description="Interview style (formal, casual, aggressive, technical)")
-    difficulty: Optional[str] = Field("medium", description="Interview difficulty level")
-    target_question_count: Optional[int] = Field(15, description="Approximate number of questions (fallback for question-based)")
-    company_name: Optional[str] = Field(None, description="Company name for context")
-    interview_duration_minutes: Optional[int] = Field(10, description="Interview duration in minutes (for time-based interviews)")
-    use_time_based_interview: Optional[bool] = Field(True, description="Whether to use time-based interview instead of question count")
+    job_role: str | None = Field("General Role", description="Target job role for the interview")
+    job_description: str | None = Field(None, description="Job description details")
+    resume_content: str | None = Field(None, description="Candidate's resume text")
+    style: str | None = Field("formal", description="Interview style (formal, casual, aggressive, technical)")
+    difficulty: str | None = Field("medium", description="Interview difficulty level")
+    target_question_count: int | None = Field(15, description="Approximate number of questions (fallback for question-based)")
+    company_name: str | None = Field(None, description="Company name for context")
+    interview_duration_minutes: int | None = Field(10, description="Interview duration in minutes (for time-based interviews)")
+    use_time_based_interview: bool | None = Field(True, description="Whether to use time-based interview instead of question count")
 
 class UserInput(BaseModel):
     """Request body for sending user message to the interview."""
@@ -39,39 +37,39 @@ class AgentResponse(BaseModel):
     """Standard response structure from agent interactions."""
     role: str
     content: Any
-    agent: Optional[str] = None
-    response_type: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    timestamp: Optional[str] = None
+    agent: str | None = None
+    response_type: str | None = None
+    metadata: dict[str, Any] | None = None
+    timestamp: str | None = None
 
 class HistoryResponse(BaseModel):
     """Response for conversation history."""
-    history: List[Dict[str, Any]]
+    history: list[dict[str, Any]]
 
 class StatsResponse(BaseModel):
     """Response for session statistics."""
-    stats: Dict[str, Any]
+    stats: dict[str, Any]
 
 class ResetResponse(BaseModel):
     """Response for resetting the session."""
     message: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 class EndResponse(BaseModel):
     """Response for ending the interview."""
-    results: Optional[Dict[str, Any]] = None
-    per_turn_feedback: Optional[List[Dict[str, str]]] = None
+    results: dict[str, Any] | None = None
+    per_turn_feedback: list[dict[str, str]] | None = None
     final_summary_status: str = "generating"  # 'generating', 'completed', 'error'
     has_immediate_data: bool = True  # Indicates per-turn feedback is immediately available
 
 class FinalSummaryStatusResponse(BaseModel):
     """Response for final summary status check."""
     status: str  # 'generating', 'completed', 'error'
-    results: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    results: dict[str, Any] | None = None
+    error: str | None = None
     suggested_poll_interval: int = 1000  # Milliseconds until next poll (exponential backoff)
-    generation_time_estimate: Optional[int] = None  # Estimated remaining time in seconds
-    resource_completion_timestamp: Optional[str] = None  # ISO timestamp when resources completed for frontend delay
+    generation_time_estimate: int | None = None  # Estimated remaining time in seconds
+    resource_completion_timestamp: str | None = None  # ISO timestamp when resources completed for frontend delay
 
 class SessionResponse(BaseModel):
     """Response for new session creation."""
@@ -102,8 +100,8 @@ async def get_session_registry(request: Request) -> ThreadSafeSessionRegistry:
     return request.app.state.agent_manager
 
 async def get_session_id(
-    session_id_header: Optional[str] = Header(None, alias="X-Session-ID"),
-    session_id_query: Optional[str] = Query(None, alias="session_id")
+    session_id_header: str | None = Header(None, alias="X-Session-ID"),
+    session_id_query: str | None = Query(None, alias="session_id")
 ) -> str:
     """Extract session ID from request headers or query params."""
     sid = session_id_header if isinstance(session_id_header, str) and session_id_header.strip() else None
@@ -178,7 +176,7 @@ def create_agent_api(app):
     async def create_session(
         start_request: InterviewStartRequest,
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Create a new interview session with configuration.
@@ -214,7 +212,7 @@ def create_agent_api(app):
     async def start_interview(
         start_request: InterviewStartRequest,
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional),
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
@@ -260,7 +258,7 @@ def create_agent_api(app):
     async def post_message(
         user_input: UserInput,
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional),
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
@@ -285,7 +283,7 @@ def create_agent_api(app):
     @router.post("/end", response_model=EndResponse)
     async def end_interview(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional),
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
@@ -331,9 +329,9 @@ def create_agent_api(app):
     @router.get("/final-summary-status", response_model=FinalSummaryStatusResponse)
     async def get_final_summary_status(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional),
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        poll_count: Optional[int] = Query(None, description="Current poll attempt count for exponential backoff")
+        poll_count: int | None = Query(None, description="Current poll attempt count for exponential backoff")
     ):
         """
         Check the status of final summary generation.
@@ -361,7 +359,7 @@ def create_agent_api(app):
                 
                 # CRITICAL FIX: Check if session needs to be saved after final summary completion
                 if hasattr(session_manager, 'needs_database_save') and session_manager.needs_database_save:
-                    logger.info(f"🔄 Session flagged for database save, saving now...")
+                    logger.info("🔄 Session flagged for database save, saving now...")
                     try:
                         save_success = await session_registry.save_session(session_manager.session_id)
                         if save_success:
@@ -401,7 +399,7 @@ def create_agent_api(app):
                         )
                 else:
                     # Still generating or not started
-                    logger.info(f"DEBUG Returning generating status")
+                    logger.info("DEBUG Returning generating status")
                     # FIXED: Add time estimate based on typical generation time (10-45 seconds)
                     time_estimate = max(30 - (poll_count * 2), 5) if poll_count < 15 else 5
                     return FinalSummaryStatusResponse(
@@ -428,7 +426,7 @@ def create_agent_api(app):
     @router.get("/history", response_model=HistoryResponse)
     async def get_history(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Get conversation history for the session.
@@ -448,7 +446,7 @@ def create_agent_api(app):
     @router.get("/stats", response_model=StatsResponse)
     async def get_stats(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Get statistics for the session.
@@ -465,10 +463,10 @@ def create_agent_api(app):
             logger.exception(f"Error getting stats for session {session_manager.session_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Error getting session stats: {e}")
 
-    @router.get("/per-turn-feedback", response_model=List[Dict[str, str]])
+    @router.get("/per-turn-feedback", response_model=list[dict[str, str]])
     async def get_per_turn_feedback(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Get current per-turn coaching feedback for the session.
@@ -487,7 +485,7 @@ def create_agent_api(app):
     @router.post("/reset", response_model=ResetResponse)
     async def reset_interview(
         session_manager: AgentSessionManager = Depends(get_session_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional),
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry)
     ):
         """
@@ -516,7 +514,7 @@ def create_agent_api(app):
     async def get_session_time_remaining(
         session_id: str = Depends(get_session_id),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Get remaining time before session cleanup.
@@ -544,7 +542,7 @@ def create_agent_api(app):
     async def ping_session(
         session_id: str = Depends(get_session_id),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Extend session by resetting idle timer.
@@ -574,7 +572,7 @@ def create_agent_api(app):
     async def cleanup_session(
         session_id: str = Depends(get_session_id),
         session_registry: ThreadSafeSessionRegistry = Depends(get_session_registry),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Immediately cleanup session (for tab close events).
@@ -597,7 +595,7 @@ def create_agent_api(app):
 
     @router.get("/scorecard/history")
     async def get_scorecard_history(
-        current_user: Dict[str, Any] = Depends(get_current_user),
+        current_user: dict[str, Any] = Depends(get_current_user),
         limit: int = 10,
     ):
         """V3.6: get candidate's cross-session scorecard history."""

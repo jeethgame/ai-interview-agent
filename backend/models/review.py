@@ -1,7 +1,10 @@
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 from sqlalchemy import Column, DateTime, Integer, String, Text
+
 from backend.database import Base
+
 
 class CodeReview(Base):
     """AST analysis and AI code review report evaluating Big-O, code smells, and design quality."""

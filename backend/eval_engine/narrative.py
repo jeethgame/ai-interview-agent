@@ -36,7 +36,7 @@ def _mastery_label(score: float) -> str:
     return "early-stage skills"
 
 
-def generate_narrative(report: "InterviewReport") -> str:
+def generate_narrative(report: InterviewReport) -> str:
     """Build a deterministic narrative paragraph for the interview report.
 
     Only segments with available data are included.  At most

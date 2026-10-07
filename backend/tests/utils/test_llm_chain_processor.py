@@ -3,10 +3,10 @@ Tests for llm_chain_processor module.
 Tests the ChainResultProcessor class extracted from llm_utils.py.
 """
 
-import pytest
 import json
 import logging
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
+
 from backend.utils.llm_chain_processor import ChainResultProcessor
 
 

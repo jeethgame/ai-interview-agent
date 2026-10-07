@@ -21,12 +21,8 @@ post/language_coach.py.  Key differences:
 from __future__ import annotations
 
 import re
-from typing import List, TYPE_CHECKING
 
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    pass  # LLMGateway replaced by Base LLMService
 
 # Common spoken filler words and phrases that signal lower fluency.
 _FILLER_WORDS: frozenset = frozenset({
@@ -65,7 +61,7 @@ class LanguageReport(BaseModel):
     notes: str = ""
 
 
-async def assess_language(turns: list, llm: "LLMGateway") -> LanguageReport:
+async def assess_language(turns: list, llm: LLMGateway) -> LanguageReport:
     """Produce a language quality report from the candidate's turns.
 
     Heuristically counts filler words, then asks the LLM to rate fluency and

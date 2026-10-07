@@ -1,9 +1,8 @@
-from typing import Any, Dict, List
-
+from typing import Any
 
 # Temporary dummy database.
 # This will later be replaced with the real database.
-DUMMY_CODING_QUESTIONS: Dict[str, Dict[str, Any]] = {
+DUMMY_CODING_QUESTIONS: dict[str, dict[str, Any]] = {
     "Q001": {
         "question_id": "Q001",
         "title": "Sum of Two Numbers",
@@ -74,14 +73,14 @@ DUMMY_CODING_QUESTIONS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_question(question_id: str) -> Dict[str, Any] | None:
+def get_question(question_id: str) -> dict[str, Any] | None:
     """
     Get a coding question using its question_id.
     """
     return DUMMY_CODING_QUESTIONS.get(question_id)
 
 
-def get_sample_test_cases(question_id: str) -> List[Dict[str, str]]:
+def get_sample_test_cases(question_id: str) -> list[dict[str, str]]:
     """
     Get sample test cases for a question.
     """
@@ -93,7 +92,7 @@ def get_sample_test_cases(question_id: str) -> List[Dict[str, str]]:
     return question["sample_test_cases"]
 
 
-def get_hidden_test_cases(question_id: str) -> List[Dict[str, str]]:
+def get_hidden_test_cases(question_id: str) -> list[dict[str, str]]:
     """
     Get hidden test cases for a question.
 

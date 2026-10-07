@@ -3,7 +3,8 @@ WebSocket connection manager for speech streaming.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any
+
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ class ConnectionManager:
     """Manages WebSocket connections for streaming STT."""
     
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: dict[str, WebSocket] = {}
 
     async def connect(self, connection_id: str, websocket: WebSocket):
         """Accept and store a WebSocket connection."""
@@ -27,7 +28,7 @@ class ConnectionManager:
             del self.active_connections[connection_id]
             logger.info(f"WebSocket connection {connection_id} closed")
 
-    async def send_message(self, connection_id: str, message: Dict[str, Any]):
+    async def send_message(self, connection_id: str, message: dict[str, Any]):
         """Send a message to a specific WebSocket connection."""
         if connection_id in self.active_connections:
             try:

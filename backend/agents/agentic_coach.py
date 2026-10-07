@@ -4,28 +4,27 @@ This agent provides coaching feedback and intelligently searches for learning re
 """
 
 import logging
-import json
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 
-from backend.agents.base import BaseAgent, AgentContext
+from backend.agents.base import AgentContext, BaseAgent
+from backend.agents.constants import DEFAULT_VALUE_NOT_PROVIDED
+from backend.agents.templates.coach_templates import (
+    EVALUATE_ANSWER_TEMPLATE,
+    FINAL_SUMMARY_TEMPLATE,
+)
 from backend.agents.tools.search_tool import LearningResourceSearchTool
 from backend.services.llm_service import LLMService
 from backend.services.search_service import SearchService
+from backend.utils.common import safe_get_or_default
 from backend.utils.event_bus import EventBus
-from backend.agents.templates.coach_templates import (
-    EVALUATE_ANSWER_TEMPLATE,
-    FINAL_SUMMARY_TEMPLATE
-)
 from backend.utils.llm_utils import (
+    format_conversation_history,
     invoke_chain_with_error_handling,
     parse_json_with_fallback,
-    format_conversation_history
 )
-from backend.utils.common import safe_get_or_default
-from backend.agents.constants import DEFAULT_VALUE_NOT_PROVIDED
 
 create_react_agent = None  # Compatibility reference for legacy test suites
 
@@ -39,11 +38,11 @@ class AgenticCoachAgent(BaseAgent):
     def __init__(
         self,
         llm_service: LLMService,
-        search_service: Optional[SearchService] = None,
-        event_bus: Optional[EventBus] = None,
-        logger: Optional[logging.Logger] = None,
-        resume_content: Optional[str] = None,
-        job_description: Optional[str] = None,
+        search_service: SearchService | None = None,
+        event_bus: EventBus | None = None,
+        logger: logging.Logger | None = None,
+        resume_content: str | None = None,
+        job_description: str | None = None,
     ):
         super().__init__(llm_service=llm_service, event_bus=event_bus, logger=logger)
         
@@ -64,8 +63,8 @@ class AgenticCoachAgent(BaseAgent):
         self, 
         question: str, 
         answer: str, 
-        justification: Optional[str], 
-        conversation_history: List[Dict[str, Any]]
+        justification: str | None, 
+        conversation_history: list[dict[str, Any]]
     ) -> str:
         """
         Evaluates a single question-answer pair using template-based approach.
@@ -104,7 +103,7 @@ class AgenticCoachAgent(BaseAgent):
             self.logger.exception(f"Error in per-turn evaluation: {e}")
             raise
     
-    def generate_final_summary_with_resources(self, conversation_history: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def generate_final_summary_with_resources(self, conversation_history: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Generates a final coaching summary with intelligent resource discovery.
         Enhanced with detailed error logging for debugging.
@@ -183,7 +182,7 @@ class AgenticCoachAgent(BaseAgent):
                 raise
             
             # Step 6: Generate resources using search tool
-            if "resource_search_topics" in summary and summary["resource_search_topics"]:
+            if summary.get("resource_search_topics"):
                 try:
                     self.logger.info(f"🔍 Generating resources for {len(summary['resource_search_topics'])} topics: {summary['resource_search_topics']}")
                     
@@ -213,9 +212,9 @@ class AgenticCoachAgent(BaseAgent):
                 # V2: augment with quantitative eval_engine scores
                 try:
                     from backend.eval_engine import (
-                        calculate_interview_score, level_for_score,
-                        calculate_readiness, generate_narrative,
+                        calculate_readiness,
                         generate_prep_list,
+                        level_for_score,
                     )
                     # Build a minimal InterviewReport-like object from summary + history
                     class _FakeReport:
@@ -249,7 +248,7 @@ class AgenticCoachAgent(BaseAgent):
             self.logger.exception(f"❌ Unexpected error in final summary generation: {e}")
             raise
     
-    def _generate_resources_with_reasoning(self, search_topics: List[str], summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _generate_resources_with_reasoning(self, search_topics: list[str], summary: dict[str, Any]) -> list[dict[str, Any]]:
         """
         Generate resources with reasoning for each recommendation.
         Enhanced with detailed error logging.
@@ -380,7 +379,7 @@ class AgenticCoachAgent(BaseAgent):
         
         return "intermediate"
     
-    def _generate_resource_reasoning(self, resource: Dict[str, Any], topic: str, 
+    def _generate_resource_reasoning(self, resource: dict[str, Any], topic: str, 
                                    weaknesses: str, improvement_areas: str) -> str:
         """
         Generate reasoning for why a specific resource was recommended.
@@ -414,11 +413,11 @@ class AgenticCoachAgent(BaseAgent):
         
         # Add specific context based on weaknesses if available
         if weaknesses and topic.lower() in weaknesses.lower():
-            base_reasoning += f", addressing the gaps identified in your interview performance"
+            base_reasoning += ", addressing the gaps identified in your interview performance"
         
         return base_reasoning
     
-    def _extract_resources_from_search_text(self, search_text: str) -> List[Dict[str, Any]]:
+    def _extract_resources_from_search_text(self, search_text: str) -> list[dict[str, Any]]:
         """Extract resources from search tool output text."""
         resources = []
         

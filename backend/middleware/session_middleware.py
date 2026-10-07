@@ -3,10 +3,9 @@ Session saving middleware for automatic session persistence.
 Ensures session data is saved after API operations that modify session state.
 """
 
-import logging
-from typing import Callable, Optional
+from collections.abc import Callable
+
 from fastapi import Request, Response
-from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from backend.config import get_logger
@@ -28,7 +27,7 @@ class SessionSavingMiddleware(BaseHTTPMiddleware):
         "/interview/reset"
     }
     
-    def __init__(self, app, session_registry_getter: Optional[Callable] = None):
+    def __init__(self, app, session_registry_getter: Callable | None = None):
         """
         Initialize the middleware.
         
@@ -64,7 +63,7 @@ class SessionSavingMiddleware(BaseHTTPMiddleware):
         
         return response
     
-    def _extract_session_id(self, request: Request) -> Optional[str]:
+    def _extract_session_id(self, request: Request) -> str | None:
         """
         Extract session ID from request headers.
         

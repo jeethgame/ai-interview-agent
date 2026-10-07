@@ -11,9 +11,8 @@ Usage:
     questions = PROBE_TAXONOMY["Failure modes"]
 """
 
-from typing import Dict, List
 
-PROBE_TAXONOMY: Dict[str, List[str]] = {
+PROBE_TAXONOMY: dict[str, list[str]] = {
     "Load-bearing decisions": [
         "What breaks first if this component fails under peak load?",
         "Which part of this system is load-bearing — the piece whose failure cascades everywhere?",

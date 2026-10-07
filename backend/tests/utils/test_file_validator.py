@@ -3,15 +3,21 @@ Tests for file_validator module.
 Tests the FileValidator class that provides security validation for file uploads.
 """
 
-import pytest
 import logging
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 from fastapi import HTTPException, UploadFile
-from backend.utils.file_validator import FileValidator
+
 from backend.config.file_processing_config import (
-    MAX_FILE_SIZE, MAX_TEXT_CONTENT_LENGTH, MIN_TEXT_LENGTH, MAX_FILENAME_LENGTH,
-    ALLOWED_CONTENT_TYPES, ALLOWED_EXTENSIONS
+    ALLOWED_CONTENT_TYPES,
+    ALLOWED_EXTENSIONS,
+    MAX_FILE_SIZE,
+    MAX_FILENAME_LENGTH,
+    MAX_TEXT_CONTENT_LENGTH,
+    MIN_TEXT_LENGTH,
 )
+from backend.utils.file_validator import FileValidator
 
 
 class TestFileValidator:

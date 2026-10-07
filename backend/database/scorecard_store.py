@@ -8,10 +8,8 @@ Rewritten from module-2/backend/models/scorecard_store.py for RDS (not SQLite).
 Schema: candidate_scorecards table (added via Alembic migration 002).
 """
 
-import uuid
 import logging
-from datetime import datetime
-from typing import Optional
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +22,15 @@ async def upsert_scorecard(
     readiness_score: float,
     rubric_band: str,
     role: str,
-) -> Optional[dict]:
+) -> dict | None:
     """
     Insert or update the scorecard entry for a user.
     Called at end of each interview after report is generated.
     """
     try:
-        from backend.database import get_db
         from sqlalchemy import text as sql_text
+
+        from backend.database import get_db
 
         async for db in get_db():
             await db.execute(sql_text("""
@@ -70,9 +69,10 @@ async def get_scorecard_history(user_id: str, limit: int = 10) -> list:
     Get a candidate's scorecard history across sessions, newest first.
     """
     try:
-        from backend.database import get_db
+
         from sqlalchemy import text as sql_text
-        import json
+
+        from backend.database import get_db
 
         async for db in get_db():
             result = await db.execute(sql_text("""

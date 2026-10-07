@@ -16,7 +16,6 @@ Usage (called from startup or a scheduler):
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +31,9 @@ async def run_retention_cleanup(dry_run: bool = False) -> dict:
     summary = {"sessions_deleted": 0, "users_anonymised": 0, "s3_objects_deleted": 0, "dry_run": dry_run}
 
     try:
-        from backend.database import get_db
         from sqlalchemy import text as sql_text
+
+        from backend.database import get_db
 
         async for db in get_db():
             # Find users who haven't updated their record in RETENTION_DAYS
@@ -115,8 +115,9 @@ async def _delete_s3_objects(urls: list) -> int:
 
     deleted = 0
     try:
-        import boto3
         import asyncio
+
+        import boto3
         s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
         keys = []
         for url in urls:

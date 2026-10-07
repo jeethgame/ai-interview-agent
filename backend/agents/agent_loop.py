@@ -1,11 +1,9 @@
-import os
-from typing import Optional
 from pydantic import BaseModel
-
-from .persona import SKEPTICAL_STAFF_ENGINEER_PROMPT, PROBING_TAXONOMY
-from .state_machine import InterviewSessionState, ProbingDepth
-from rag.parser import StructuredCandidateProfile, TechnicalClaim
+from rag.parser import StructuredCandidateProfile
 from rag.retriever import ClaimRetriever
+
+from .state_machine import InterviewSessionState, ProbingDepth
+
 
 class AgentLoopStep(BaseModel):
     observation: str
@@ -13,7 +11,7 @@ class AgentLoopStep(BaseModel):
     decision: str  # PROBE_DEEPER, PIVOT, INVOKE_CODING
     act_output: str
     depth: ProbingDepth
-    claim_anchor: Optional[str] = None
+    claim_anchor: str | None = None
 
 class StatefulAgentEngine:
     """The central nervous system of Module 2 executing the Observe -> Reason -> Decide -> Act loop."""
@@ -23,7 +21,7 @@ class StatefulAgentEngine:
         cls,
         session_state: InterviewSessionState,
         candidate_response: str,
-        profile: Optional[StructuredCandidateProfile] = None,
+        profile: StructuredCandidateProfile | None = None,
     ) -> AgentLoopStep:
         """Run the four-step agent loop against candidate response and resume claims."""
         turn_number = len([t for t in session_state.turns if t.sender == "CANDIDATE"]) + 1

@@ -1,12 +1,12 @@
 import io
 import re
-from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
-import pypdf
 
-from .pre_validator import ResumePreValidator, PreValidationError
+import pypdf
+from pydantic import BaseModel, Field
+
+from .experience_parser import parse_experience
+from .pre_validator import PreValidationError, ResumePreValidator
 from .section_extractor import extract_sections
-from .experience_parser import parse_experience, seniority_rank
 
 # ---------------------------------------------------------------------------
 # Skill vocabulary — lowercase lookup keys.
@@ -161,24 +161,24 @@ def normalize_text(text: str) -> str:
 class TechnicalClaim(BaseModel):
     category: str = Field(description="Architecture, Database, Concurrency, or Optimization")
     raw_statement: str
-    quantified_metric: Optional[str] = None
-    technologies: List[str] = Field(default_factory=list)
+    quantified_metric: str | None = None
+    technologies: list[str] = Field(default_factory=list)
     veracity_level: str = "UNVERIFIED"  # UNVERIFIED, PROBED_SOUND, PROBED_FLAWED
 
 class StructuredCandidateProfile(BaseModel):
     file_hash: str
-    full_name: Optional[str] = "Candidate"
-    target_role: Optional[str] = "Software Engineer"
-    skills: List[str] = Field(default_factory=list)
-    projects: List[str] = Field(default_factory=list)
-    claims: List[TechnicalClaim] = Field(default_factory=list)
+    full_name: str | None = "Candidate"
+    target_role: str | None = "Software Engineer"
+    skills: list[str] = Field(default_factory=list)
+    projects: list[str] = Field(default_factory=list)
+    claims: list[TechnicalClaim] = Field(default_factory=list)
     raw_text: str
     # --- Task 3 additions ---
-    years_experience: Optional[int] = None
+    years_experience: int | None = None
     seniority_detected: str = "unknown"
-    sections: Dict[str, str] = Field(default_factory=dict)
+    sections: dict[str, str] = Field(default_factory=dict)
     # --- Task 11 additions (Feature #31 GitHub enrichment) ---
-    github_repos: List[dict] = Field(default_factory=list)
+    github_repos: list[dict] = Field(default_factory=list)
 
 class ResumeParser:
     """Production PDF parsing and claim extraction engine."""
@@ -195,7 +195,7 @@ class ResumeParser:
                     text_parts.append(page_text)
             return "\n".join(text_parts).strip()
         except Exception as e:
-            raise PreValidationError(f"Failed to extract text from PDF: {str(e)}")
+            raise PreValidationError(f"Failed to extract text from PDF: {e!s}")
 
     @classmethod
     def parse_profile(cls, raw_content: str, file_hash: str = "direct-text-hash") -> StructuredCandidateProfile:
@@ -204,7 +204,7 @@ class ResumeParser:
         cleaned_text = normalize_text(cleaned_text)
 
         # 1. Skill Extraction — word-boundary regex + display-name normalization
-        extracted_skills: List[str] = []
+        extracted_skills: list[str] = []
         for skill in KNOWN_SKILLS:
             if _contains_term(cleaned_text, skill):
                 display_name = DISPLAY_NAMES.get(skill, skill.title())
@@ -221,7 +221,7 @@ class ResumeParser:
                     projects.append(line)
 
         # 3. Technical Claims Extraction with Metric Flagging
-        claims: List[TechnicalClaim] = []
+        claims: list[TechnicalClaim] = []
         for line in lines:
             line_lower = line.lower()
             # Identify quantified claims or action-heavy engineering assertions

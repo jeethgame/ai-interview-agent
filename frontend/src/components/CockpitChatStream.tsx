@@ -136,8 +136,8 @@ const CockpitChatStream: React.FC<CockpitChatStreamProps> = ({
         </div>
       )}
 
-      {/* ── User speaking / transcript bubble ── */}
-      {(isUserSpeaking || accumulatedTranscript) && (
+      {/* ── User speaking / transcript bubble — only during user turn ── */}
+      {turnState === 'user' && (isUserSpeaking || accumulatedTranscript) && (
         <div className="flex justify-end">
           <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-[#FEF3C7] border border-[#EAB308]/40">
             {accumulatedTranscript ? (

@@ -8,9 +8,12 @@ instead of M2's custom gateway.
 
 import json
 import logging
-from typing import Optional
 
-from backend.blueprint.models import InterviewBlueprint, InterviewSection, EvaluationExpectation
+from backend.blueprint.models import (
+    EvaluationExpectation,
+    InterviewBlueprint,
+    InterviewSection,
+)
 from backend.blueprint.role_calibration import load_role
 
 logger = logging.getLogger(__name__)
@@ -109,8 +112,7 @@ def generate_blueprint(
             raw = raw.strip()
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
+                raw = raw.removeprefix("json")
             data = json.loads(raw.strip())
             return InterviewBlueprint(**data)
         except Exception as e:

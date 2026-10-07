@@ -16,7 +16,6 @@ rank_gap_score(candidate, target)   -> float
 """
 
 import re
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Years-of-experience patterns — lifted from ai-resume-matcher scorer.py:99-126
@@ -33,7 +32,7 @@ _EXPERIENCE_PATTERNS = [
 ]
 
 
-def parse_experience(text: str) -> Optional[int]:
+def parse_experience(text: str) -> int | None:
     """Return the dominant years-of-experience figure found in *text*.
 
     For range patterns (e.g. ``"3-5 years"``) the **upper bound** is returned
@@ -76,7 +75,7 @@ def parse_experience(text: str) -> Optional[int]:
 # Seniority rank — lifted from ai-resume-matcher scorer.py:129-139
 # ---------------------------------------------------------------------------
 
-def seniority_rank(level: Optional[str]) -> Optional[int]:
+def seniority_rank(level: str | None) -> int | None:
     """Map a seniority label to a numeric rank.
 
     ``junior/entry/intern/graduate`` → 1

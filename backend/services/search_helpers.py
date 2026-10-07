@@ -3,13 +3,24 @@ Helper classes for search service functionality.
 Extracts the resource classification and relevance scoring logic.
 """
 
-from typing import Optional
+
 from .search_config import (
-    COURSE_DOMAINS, VIDEO_DOMAINS, DOCUMENTATION_DOMAINS, COMMUNITY_DOMAINS, BOOK_DOMAINS,
-    COURSE_INDICATORS, VIDEO_INDICATORS, DOCUMENTATION_INDICATORS, 
-    TUTORIAL_INDICATORS, COMMUNITY_INDICATORS, BOOK_INDICATORS,
-    TOP_QUALITY_DOMAINS, MEDIUM_QUALITY_DOMAINS,
-    PROFICIENCY_LEVEL_TERMS, RELEVANCE_WEIGHTS, DOMAIN_QUALITY_SCORES
+    BOOK_DOMAINS,
+    BOOK_INDICATORS,
+    COMMUNITY_DOMAINS,
+    COMMUNITY_INDICATORS,
+    COURSE_DOMAINS,
+    COURSE_INDICATORS,
+    DOCUMENTATION_DOMAINS,
+    DOCUMENTATION_INDICATORS,
+    DOMAIN_QUALITY_SCORES,
+    MEDIUM_QUALITY_DOMAINS,
+    PROFICIENCY_LEVEL_TERMS,
+    RELEVANCE_WEIGHTS,
+    TOP_QUALITY_DOMAINS,
+    TUTORIAL_INDICATORS,
+    VIDEO_DOMAINS,
+    VIDEO_INDICATORS,
 )
 
 
@@ -101,7 +112,7 @@ class RelevanceScorer:
         description: str,
         skill: str,
         proficiency_level: str,
-        job_role: Optional[str] = None
+        job_role: str | None = None
     ) -> float:
         """
         Calculate relevance score for a resource.

@@ -7,7 +7,6 @@ passes_anti_pattern_check(question, history) — conversational pattern check.
 """
 
 import re
-from typing import List
 
 # ---------------------------------------------------------------------------
 # Quality Gate
@@ -105,7 +104,7 @@ def _word_overlap_ratio(a: str, b: str) -> float:
     return len(intersection) / len(union)
 
 
-def passes_anti_pattern_check(question: str, history: List[str]) -> bool:
+def passes_anti_pattern_check(question: str, history: list[str]) -> bool:
     """Return True if the question passes all six anti-pattern checks.
 
     Anti-patterns detected:

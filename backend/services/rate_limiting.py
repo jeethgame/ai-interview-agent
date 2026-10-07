@@ -4,9 +4,8 @@ Provides semaphore-based limiting for AssemblyAI, Polly, Deepgram, and Search AP
 """
 
 import asyncio
-import logging
-from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from typing import Any
+
 from backend.config import get_logger
 
 logger = get_logger(__name__)
@@ -169,7 +168,7 @@ class APIRateLimiter:
         except Exception as e:
             logger.error(f"Failed to release Search slot: {e}")
     
-    def get_usage_stats(self) -> Dict[str, Any]:
+    def get_usage_stats(self) -> dict[str, Any]:
         """
         Get current API usage statistics.
         
@@ -226,7 +225,7 @@ class APIRateLimiter:
 
 
 # Global rate limiter instance
-_rate_limiter: Optional[APIRateLimiter] = None
+_rate_limiter: APIRateLimiter | None = None
 
 
 def get_rate_limiter() -> APIRateLimiter:

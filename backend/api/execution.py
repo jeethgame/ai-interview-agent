@@ -5,13 +5,12 @@ Accepts {source_code, language, stdin} and returns {status, stdout, stderr}.
 Calls Judge0 when JUDGE0_URL is configured; returns a clear error otherwise.
 """
 
-import os
 import base64
 import logging
-from typing import Optional
+import os
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -28,9 +27,9 @@ class RunRequest(BaseModel):
     source_code: str
     language: str = "python"
     stdin: str = ""
-    question_id: Optional[str] = None
-    test_cases: Optional[list] = None
-    session_id: Optional[str] = None
+    question_id: str | None = None
+    test_cases: list | None = None
+    session_id: str | None = None
 
 
 class SubmitRequest(BaseModel):

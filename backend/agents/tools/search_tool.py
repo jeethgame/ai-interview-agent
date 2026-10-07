@@ -5,12 +5,12 @@ Provides intelligent search capabilities for finding educational resources.
 
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from backend.services.search_service import SearchService, Resource
 from backend.services.search_config import BOOK_DOMAINS
+from backend.services.search_service import Resource, SearchService
 
 
 class SearchInput(BaseModel):
@@ -20,7 +20,7 @@ class SearchInput(BaseModel):
         description="The user's proficiency level: 'beginner', 'intermediate', 'advanced', or 'expert'",
         default="intermediate"
     )
-    job_role: Optional[str] = Field(
+    job_role: str | None = Field(
         description="The job role context for the search (optional)",
         default=None
     )
@@ -58,7 +58,7 @@ class LearningResourceSearchTool(BaseTool):
     """
     args_schema: type[BaseModel] = SearchInput
     
-    def __init__(self, search_service: SearchService, logger: Optional[logging.Logger] = None):
+    def __init__(self, search_service: SearchService, logger: logging.Logger | None = None):
         """
         Initialize the search tool.
         
@@ -71,7 +71,7 @@ class LearningResourceSearchTool(BaseTool):
         object.__setattr__(self, 'search_service', search_service)
         object.__setattr__(self, 'logger', logger or logging.getLogger(__name__))
     
-    def _filter_free_resources(self, resources: List[Resource]) -> List[Resource]:
+    def _filter_free_resources(self, resources: list[Resource]) -> list[Resource]:
         """
         Filter out paid/book resources, keeping only free accessible content.
         
@@ -107,7 +107,7 @@ class LearningResourceSearchTool(BaseTool):
         return free_resources
     
     def _run(self, skill: str, proficiency_level: str = "intermediate", 
-             job_role: Optional[str] = None, num_results: int = 5) -> str:
+             job_role: str | None = None, num_results: int = 5) -> str:
         """
         Synchronous wrapper for the search operation.
         
@@ -155,10 +155,10 @@ class LearningResourceSearchTool(BaseTool):
             
         except Exception as e:
             self.logger.error(f"Error in sync search tool: {e}")
-            return f"Search failed: {str(e)}"
+            return f"Search failed: {e!s}"
     
     async def _arun(self, skill: str, proficiency_level: str = "intermediate", 
-                    job_role: Optional[str] = None, num_results: int = 5) -> str:
+                    job_role: str | None = None, num_results: int = 5) -> str:
         """
         Async implementation for LangGraph and other async contexts.
         
@@ -169,10 +169,10 @@ class LearningResourceSearchTool(BaseTool):
             return await self._perform_search(skill, proficiency_level, job_role, num_results)
         except Exception as e:
             self.logger.error(f"Error in async search tool: {e}")
-            return f"Search failed: {str(e)}"
+            return f"Search failed: {e!s}"
     
     async def _perform_search(self, skill: str, proficiency_level: str,
-                             job_role: Optional[str], num_results: int) -> str:
+                             job_role: str | None, num_results: int) -> str:
         """
         Core search functionality used by both sync and async methods.
         
@@ -201,9 +201,9 @@ class LearningResourceSearchTool(BaseTool):
             
         except Exception as e:
             self.logger.error(f"Error in search operation: {e}")
-            return f"Search failed for '{skill}': {str(e)}"
+            return f"Search failed for '{skill}': {e!s}"
     
-    def _format_results_for_llm(self, resources: List[Resource], skill: str) -> str:
+    def _format_results_for_llm(self, resources: list[Resource], skill: str) -> str:
         """
         Format search results in a way the LLM can understand and use.
         

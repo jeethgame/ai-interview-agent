@@ -3,17 +3,16 @@ Comprehensive tests for the Agentic Coach Agent implementation.
 Tests the agent's ability to provide coaching feedback and find learning resources.
 """
 
-import pytest
-import asyncio
 import json
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any, List
+from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
 from backend.agents.agentic_coach import AgenticCoachAgent
 from backend.agents.tools.search_tool import LearningResourceSearchTool
 from backend.services.llm_service import LLMService
-from backend.services.search_service import SearchService, Resource
+from backend.services.search_service import Resource, SearchService
 from backend.utils.event_bus import EventBus
 
 

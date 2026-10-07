@@ -18,7 +18,6 @@ import hashlib
 import logging
 import os
 from functools import lru_cache
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +72,6 @@ class _KMSEncryptor:
     def encrypt(self, plaintext: str) -> str:
         if not plaintext:
             return plaintext
-        import boto3
         from cryptography.fernet import Fernet
 
         resp = self._kms.generate_data_key(KeyId=self._key_id, KeySpec="AES_256")
@@ -120,14 +118,14 @@ def get_encryptor():
     return _FernetEncryptor(key)
 
 
-def encrypt_field(value: Optional[str]) -> Optional[str]:
+def encrypt_field(value: str | None) -> str | None:
     """Encrypt a nullable text field. Returns None if value is None."""
     if value is None:
         return None
     return get_encryptor().encrypt(value)
 
 
-def decrypt_field(value: Optional[str]) -> Optional[str]:
+def decrypt_field(value: str | None) -> str | None:
     """Decrypt a nullable text field. Returns None if value is None."""
     if value is None:
         return None

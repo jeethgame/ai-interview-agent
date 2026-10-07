@@ -10,14 +10,15 @@ leaves the original score object untouched rather than wiping a valid score.
 """
 from __future__ import annotations
 
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from eval_engine.reporter import CompetencyScore
-    from backend.agents.state_machine import InterviewSessionState
     from llm.gateway import LLMGateway
+
+    from backend.agents.state_machine import InterviewSessionState
 
 # Only scores in these mastery bands warrant an adversarial second look.
 _VERIFY_LEVELS = frozenset({"developing", "novice"})
@@ -31,10 +32,10 @@ class _VerifierVerdict(BaseModel):
 
 
 async def verify_scores(
-    scores: "Dict[str, CompetencyScore]",
-    state: "InterviewSessionState",
-    llm: "LLMGateway",
-) -> "Dict[str, CompetencyScore]":
+    scores: dict[str, CompetencyScore],
+    state: InterviewSessionState,
+    llm: LLMGateway,
+) -> dict[str, CompetencyScore]:
     """Adversarially re-check developing/novice scores; return a refined dict.
 
     The output preserves all competency keys and their insertion order.
@@ -52,7 +53,7 @@ async def verify_scores(
     from eval_engine.rubric import level_for_score
 
     # Build candidate transcript excerpts keyed by competency (from turn.competency).
-    transcript_by_comp: Dict[str, str] = {}
+    transcript_by_comp: dict[str, str] = {}
     for turn in state.turns:
         if turn.sender != "CANDIDATE":
             continue
@@ -63,7 +64,7 @@ async def verify_scores(
         joined = f"{prev}\n\n{turn.content}".strip()
         transcript_by_comp[comp] = joined[:3000]
 
-    verified: Dict[str, "CompetencyScore"] = {}
+    verified: dict[str, CompetencyScore] = {}
     for comp, cs in scores.items():
         # mastery / proficient: no adversarial check needed
         if cs.mastery_level not in _VERIFY_LEVELS:

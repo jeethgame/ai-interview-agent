@@ -6,17 +6,17 @@ import asyncio
 import logging
 import os
 import uuid
-from typing import Optional, Dict, Any
 
 from deepgram import DeepgramClient, LiveOptions
 from deepgram.clients.live.v1.enums import LiveTranscriptionEvents
 from fastapi import WebSocket, WebSocketDisconnect
 
+from backend.services.rate_limiting import get_rate_limiter
+from backend.utils.common import get_current_timestamp
+
 from .connection_manager import ConnectionManager
 from .deepgram_handlers import DeepgramEventHandlers
 from .websocket_processor import WebSocketMessageProcessor
-from backend.utils.common import get_current_timestamp
-from backend.services.rate_limiting import get_rate_limiter
 
 logger = logging.getLogger(__name__)
 

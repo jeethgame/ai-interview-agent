@@ -1,7 +1,7 @@
-from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 
-from backend.agents.state_machine import InterviewSessionState, ConversationTurn, TurnVerdict
+from backend.agents.state_machine import InterviewSessionState
+
 
 class EvidenceCitation(BaseModel):
     category: str
@@ -18,9 +18,9 @@ class STREvaluationReport(BaseModel):
     system_design_score: float # 0 to 10
     communication_score: float # 0 to 10
     veracity_score: float      # 0 to 10
-    citations: List[EvidenceCitation] = Field(default_factory=list)
-    strengths: List[str] = Field(default_factory=list)
-    weaknesses: List[str] = Field(default_factory=list)
+    citations: list[EvidenceCitation] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
     executive_summary: str
 
 class STAREvaluator:
@@ -32,9 +32,9 @@ class STAREvaluator:
         candidate_turns = [t for t in session.turns if t.sender == "CANDIDATE"]
         total_candidate_words = sum(len(t.content.split()) for t in candidate_turns)
 
-        citations: List[EvidenceCitation] = []
-        strengths: List[str] = []
-        weaknesses: List[str] = []
+        citations: list[EvidenceCitation] = []
+        strengths: list[str] = []
+        weaknesses: list[str] = []
 
         # Baseline scores
         correctness = 7.0

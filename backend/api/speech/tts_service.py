@@ -3,16 +3,15 @@ Text-to-Speech service using Amazon Polly with rate limiting and retry logic.
 """
 
 import asyncio
+import hashlib
 import html
 import logging
 import os
-from typing import Optional, Dict
 import random
-import hashlib
 
 import boto3
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from botocore.config import Config
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
@@ -28,7 +27,7 @@ class TTSService:
         self.polly_client = None
         self.rate_limiter = get_rate_limiter()
         # Simple in-memory cache for frequently used phrases
-        self.audio_cache: Dict[str, bytes] = {}
+        self.audio_cache: dict[str, bytes] = {}
         self.cache_max_size = 50  # Limit cache size
         
         # Load TTS configuration from environment variables
@@ -162,7 +161,7 @@ class TTSService:
                         continue
                     else:
                         logger.exception("Unexpected error during text-to-speech synthesis with Polly")
-                        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+                        raise HTTPException(status_code=500, detail=f"Internal server error: {e!s}")
             
             raise HTTPException(status_code=500, detail="TTS synthesis failed after all retry attempts")
             
@@ -204,7 +203,7 @@ class TTSService:
         
         return audio_content
     
-    async def synthesize_text(self, text: str, voice_id: Optional[str] = None, speed: float = 1.0) -> Response:
+    async def synthesize_text(self, text: str, voice_id: str | None = None, speed: float = 1.0) -> Response:
         """
         Synthesize speech from text with rate limiting.
         
@@ -244,9 +243,9 @@ class TTSService:
             raise
         except Exception as e:
             logger.exception("Unexpected error during text-to-speech synthesis")
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Internal server error: {e!s}")
     
-    async def stream_text(self, text: str, voice_id: Optional[str] = None, speed: float = 1.0) -> StreamingResponse:
+    async def stream_text(self, text: str, voice_id: str | None = None, speed: float = 1.0) -> StreamingResponse:
         """
         Synthesize speech from text and stream the audio with rate limiting.
         
@@ -320,7 +319,7 @@ class TTSService:
             )
         except Exception as e:
             logger.exception("Unexpected error during streaming text-to-speech synthesis with Polly")
-            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Internal server error: {e!s}")
         finally:
             # Always release the rate limiting slot
             self.rate_limiter.release_polly() 

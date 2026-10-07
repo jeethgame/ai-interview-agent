@@ -4,29 +4,29 @@ Provides initialization functions for creating and configuring service instances
 Refactored for multi-session support with database persistence and API rate limiting.
 """
 
-import os
 import logging
-from typing import Optional, TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, Optional
 
-from backend.utils.event_bus import EventBus
-from backend.services.search_service import SearchService
-from backend.services.llm_service import LLMService
+from backend.config import get_logger
 from backend.database.db_manager import DatabaseManager
 from backend.database.mock_db_manager import MockDatabaseManager
+from backend.services.llm_service import LLMService
 from backend.services.rate_limiting import APIRateLimiter
-from backend.config import get_logger
+from backend.services.search_service import SearchService
+from backend.utils.event_bus import EventBus
 
 if TYPE_CHECKING:
     from backend.services.session_manager import ThreadSafeSessionRegistry
 
 logger = get_logger(__name__)
 
-_llm_service: Optional[LLMService] = None
-_event_bus: Optional[EventBus] = None
-_search_service: Optional[SearchService] = None
-_database_manager: Optional[DatabaseManager] = None
+_llm_service: LLMService | None = None
+_event_bus: EventBus | None = None
+_search_service: SearchService | None = None
+_database_manager: DatabaseManager | None = None
 _session_registry: Optional["ThreadSafeSessionRegistry"] = None
-_rate_limiter: Optional[APIRateLimiter] = None
+_rate_limiter: APIRateLimiter | None = None
 
 
 def get_llm_service() -> LLMService:

@@ -4,15 +4,14 @@ POST /api/blueprints/create   generate blueprint from profile + role
 GET  /api/blueprints/{id}     fetch stored blueprint
 """
 
-import uuid
 import logging
-from typing import Optional
+import uuid
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from backend.blueprint import generate_blueprint, InterviewBlueprint
 from backend.api.auth_api import get_current_user_optional
+from backend.blueprint import generate_blueprint
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class BlueprintResponse(BaseModel):
 @router.post("/create", response_model=BlueprintResponse)
 async def create_blueprint(
     body: BlueprintCreateRequest,
-    user: Optional[dict] = Depends(get_current_user_optional),
+    user: dict | None = Depends(get_current_user_optional),
 ):
     try:
         llm_service = None

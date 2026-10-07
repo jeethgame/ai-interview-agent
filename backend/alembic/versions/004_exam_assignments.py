@@ -5,8 +5,8 @@ Revises: 003_institutional_layer
 Create Date: 2026-10-05
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "004_exam_assignments"
 down_revision = "003_institutional_layer"

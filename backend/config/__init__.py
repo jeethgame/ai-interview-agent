@@ -6,10 +6,10 @@ and Amazon Nova 2 Sonic voice engine parameters.
 Authored strictly from our team's engineering perspective for Project 08.
 """
 
+import logging
 import os
 import sys
-import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 # Primary Amazon Nova 2 Sonic Configuration
 NOVA_SONIC_MODEL_ID = os.getenv("NOVA_SONIC_MODEL_ID", "amazon.nova-2-sonic-v1:0")
@@ -27,8 +27,8 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def create_session_logger(name: str, session_id: Optional[str] = None, 
-                         user_id: Optional[str] = None) -> logging.Logger:
+def create_session_logger(name: str, session_id: str | None = None, 
+                         user_id: str | None = None) -> logging.Logger:
     """
     Create a logger with session context for enhanced debugging.
     """
@@ -47,7 +47,7 @@ def create_session_logger(name: str, session_id: Optional[str] = None,
     return SessionLoggerAdapter(logger, {})
 
 
-def get_environment_info() -> Dict[str, Any]:
+def get_environment_info() -> dict[str, Any]:
     """
     Get current environment diagnostic information including voice engine parameters.
     """
@@ -85,19 +85,20 @@ def get_environment_info() -> Dict[str, Any]:
 
 
 __all__ = [
-    'get_logger',
-    'create_session_logger',
-    'get_environment_info',
+    'AWS_ACCESS_KEY_ID',
+    'AWS_REGION',
+    'AWS_SECRET_ACCESS_KEY',
     'NOVA_SONIC_MODEL_ID',
     'NOVA_SONIC_VOICE_ID',
-    'AWS_REGION',
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
+    'create_session_logger',
+    'get_environment_info',
+    'get_logger',
     'settings',
 ]
 
 # ── Team-B Settings — shared config for coding platform endpoints ──
 from pydantic import BaseModel as _BaseModel
+
 
 class _Settings(_BaseModel):
     PROJECT_NAME: str = "Project 08 - AI Mock Interview & Assessment Platform"

@@ -2,15 +2,14 @@
 Session Manager for coordinating agents.
 """
 
-import logging
-import json
 import asyncio
+import logging
 import uuid
-from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
+from typing import Any
 
-from backend.agents.interviewer import InterviewerAgent
 from backend.agents.agentic_coach import AgenticCoachAgent
+from backend.agents.interviewer import InterviewerAgent
 
 # V3: session guard (hard time + turn limits)
 try:
@@ -18,14 +17,10 @@ try:
     _GUARD_AVAILABLE = True
 except ImportError:
     _GUARD_AVAILABLE = False
-from backend.utils.event_bus import Event, EventBus, EventType
 from backend.agents.config_models import SessionConfig
-from backend.services.llm_service import LLMService
 from backend.services import get_search_service
-from backend.utils.common import get_current_timestamp
-from backend.agents.constants import (
-    ERROR_AGENT_LOAD_FAILED, ERROR_PROCESSING_REQUEST,
-)
+from backend.services.llm_service import LLMService
+from backend.utils.event_bus import Event, EventBus, EventType
 
 
 class AgentSessionManager:
@@ -40,7 +35,7 @@ class AgentSessionManager:
     """
 
     def __init__(self, llm_service: LLMService, event_bus: EventBus, logger: logging.Logger,
-                 session_config: SessionConfig, session_id: Optional[str] = None):
+                 session_config: SessionConfig, session_id: str | None = None):
         self.llm_service = llm_service
         self.event_bus = event_bus
         self.logger = logger
@@ -51,16 +46,16 @@ class AgentSessionManager:
         self.final_summary_generating: bool = False
         self.needs_database_save: bool = False
 
-        self.conversation_history: List[Dict[str, Any]] = []
-        self.per_turn_coaching_feedback_log: List[Dict[str, str]] = []
+        self.conversation_history: list[dict[str, Any]] = []
+        self.per_turn_coaching_feedback_log: list[dict[str, str]] = []
 
-        self.final_summary: Optional[Dict[str, Any]] = None
-        self.resource_generation_completed_at: Optional[datetime] = None
+        self.final_summary: dict[str, Any] | None = None
+        self.resource_generation_completed_at: datetime | None = None
 
-        self._interviewer: Optional[InterviewerAgent] = None
-        self._coach: Optional[AgenticCoachAgent] = None
+        self._interviewer: InterviewerAgent | None = None
+        self._coach: AgenticCoachAgent | None = None
 
-        self.response_times: List[float] = []
+        self.response_times: list[float] = []
         self.total_response_time = 0.0
         self.total_tokens_used = 0
         self.api_call_count = 0
@@ -104,7 +99,7 @@ class AgentSessionManager:
             ))
         return self._interviewer
 
-    def _get_coach(self) -> Optional[AgenticCoachAgent]:
+    def _get_coach(self) -> AgenticCoachAgent | None:
         """Get or create the AgenticCoachAgent (uses Gemini for evaluation)."""
         if self._coach is None:
             try:
@@ -145,7 +140,7 @@ class AgentSessionManager:
         """Get the interview introduction text."""
         return self._get_interviewer().create_introduction()
 
-    def record_voice_turn(self, role: str, text: str) -> Dict[str, Any]:
+    def record_voice_turn(self, role: str, text: str) -> dict[str, Any]:
         """
         Record a completed voice turn from Nova Sonic.
         Updates InterviewerAgent state and conversation history.
@@ -210,7 +205,7 @@ class AgentSessionManager:
     # Text path — records turn for non-voice usage (same controller)
     # ------------------------------------------------------------------
 
-    def process_message(self, message: str) -> Dict[str, Any]:
+    def process_message(self, message: str) -> dict[str, Any]:
         """
         Process a user message from the text/REST path.
         Records the turn through the same InterviewerAgent controller.
@@ -250,7 +245,7 @@ class AgentSessionManager:
 
         # Generate real interviewer response via LLM (text-path fallback)
         try:
-            from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+            from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
             llm = self.llm_service.get_llm()
             system_prompt = self._get_interviewer().get_system_prompt()
             lc_messages = [SystemMessage(content=system_prompt)]
@@ -270,7 +265,6 @@ class AgentSessionManager:
             if _GUARD_AVAILABLE:
                 try:
                     from backend.agents.question_quality import passes_quality_gate
-                    from backend.agents.pushback_handler import detect_pushback
                     if not passes_quality_gate(ai_text):
                         # Regenerate once with explicit instruction
                         retry_msgs = lc_messages + [AIMessage(content=ai_text),
@@ -299,7 +293,7 @@ class AgentSessionManager:
     # Coaching feedback (unchanged — CoachAgent uses Gemini)
     # ------------------------------------------------------------------
 
-    def _generate_coaching_feedback(self, user_message_data: Dict[str, Any]) -> None:
+    def _generate_coaching_feedback(self, user_message_data: dict[str, Any]) -> None:
         """Collect live feedback from the agentic coach agent if available."""
         try:
             question = self._find_last_interviewer_question()
@@ -315,7 +309,7 @@ class AgentSessionManager:
         except Exception as e:
             self.logger.exception(f"Error generating coaching feedback: {e}")
 
-    def _find_last_interviewer_question(self) -> Optional[str]:
+    def _find_last_interviewer_question(self) -> str | None:
         for message in reversed(self.conversation_history):
             if (message.get("role") == "assistant" and
                     message.get("agent") == "interviewer"):
@@ -331,7 +325,7 @@ class AgentSessionManager:
             conversation_history=filtered_history
         )
 
-    def _create_filtered_history_for_coach(self) -> List[Dict[str, Any]]:
+    def _create_filtered_history_for_coach(self) -> list[dict[str, Any]]:
         filtered_history = []
         for message in self.conversation_history:
             if message.get("role") in ["user", "assistant"]:
@@ -357,7 +351,7 @@ class AgentSessionManager:
     # End interview + final summary (background, uses CoachAgent/Gemini)
     # ------------------------------------------------------------------
 
-    def end_interview(self) -> Dict[str, Any]:
+    def end_interview(self) -> dict[str, Any]:
         """End the interview session and start background final summary generation."""
         self.event_bus.publish(Event(
             event_type=EventType.SESSION_END,
@@ -406,14 +400,14 @@ class AgentSessionManager:
                 self.session_status = "completed"
 
         except Exception as e:
-            self.final_summary = {"error": f"Final coaching summary generation failed: {str(e)}"}
+            self.final_summary = {"error": f"Final coaching summary generation failed: {e!s}"}
             self.session_status = "completed"
             self.logger.exception(f"Background final summary EXCEPTION for session {self.session_id}")
         finally:
             self.final_summary_generating = False
             self.needs_database_save = True
 
-    def _generate_final_coaching_summary(self) -> Optional[Dict[str, Any]]:
+    def _generate_final_coaching_summary(self) -> dict[str, Any] | None:
         """Generate final coaching summary using agentic coach agent."""
         try:
             coach_agent = self._get_coach()
@@ -430,10 +424,10 @@ class AgentSessionManager:
     # Session state queries
     # ------------------------------------------------------------------
 
-    def get_conversation_history(self) -> List[Dict[str, Any]]:
+    def get_conversation_history(self) -> list[dict[str, Any]]:
         return self.conversation_history
 
-    def get_session_stats(self) -> Dict[str, Any]:
+    def get_session_stats(self) -> dict[str, Any]:
         avg_response_time = (self.total_response_time / len(self.response_times)) if self.response_times else 0
         return {
             "total_messages": len(self.conversation_history),
@@ -468,7 +462,7 @@ class AgentSessionManager:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_session_data(cls, session_data: Dict, llm_service: LLMService,
+    def from_session_data(cls, session_data: dict, llm_service: LLMService,
                          event_bus: EventBus, logger: logging.Logger) -> 'AgentSessionManager':
         config_data = session_data.get("session_config", {})
         session_config = SessionConfig(**config_data) if config_data else SessionConfig()
@@ -500,7 +494,7 @@ class AgentSessionManager:
         logger.info(f"Restored session manager from database: {manager.session_id}")
         return manager
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         session_config_dict = self.session_config.model_dump() if hasattr(self.session_config, 'model_dump') else vars(self.session_config)
         for key, value in session_config_dict.items():
             if hasattr(value, 'value'):
@@ -519,5 +513,5 @@ class AgentSessionManager:
             "status": self.session_status
         }
 
-    def get_langchain_config(self) -> Dict:
+    def get_langchain_config(self) -> dict:
         return {"configurable": {"thread_id": self.session_id}}

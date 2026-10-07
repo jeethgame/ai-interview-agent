@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-
 # Max contribution per component when the interview is fully covered
 FULL_WEIGHTS: dict[str, float] = {
     "technical_depth": 0.40,

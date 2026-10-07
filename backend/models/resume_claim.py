@@ -1,7 +1,10 @@
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 from sqlalchemy import Column, DateTime, String, Text
+
 from backend.database import Base
+
 
 class ResumeClaim(Base):
     """Extracted resume skills, projects, and verifiable claims used to anchor the probing agent."""

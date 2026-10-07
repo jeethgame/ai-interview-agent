@@ -4,12 +4,10 @@ Replaces the Supabase SDK client.
 """
 
 import uuid
-import json
-import logging
-from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from typing import Any
 
-from sqlalchemy import select, update, delete, text
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import get_logger
@@ -38,9 +36,12 @@ class DatabaseManager:
 
     # ── User ──────────────────────────────────────────────────────────────
 
-    async def register_user(self, email: str, password: str, name: str) -> Dict[str, Any]:
+    async def register_user(self, email: str, password: str, name: str) -> dict[str, Any]:
+        import os
+
+        import jwt as pyjwt
+
         from backend.models.core import PlatformUser
-        import jwt as pyjwt, os
         user_id = str(uuid.uuid4())
         async with _get_session() as s:
             s.add(PlatformUser(id=uuid.UUID(user_id), email=email, name=name,
@@ -52,9 +53,12 @@ class DatabaseManager:
         return {"access_token": token, "refresh_token": token,
                 "user": {"id": user_id, "email": email, "name": name}}
 
-    async def login_user(self, email: str, password: str) -> Dict[str, Any]:
+    async def login_user(self, email: str, password: str) -> dict[str, Any]:
+        import os
+
+        import jwt as pyjwt
+
         from backend.models.core import PlatformUser
-        import jwt as pyjwt, os
         async with _get_session() as s:
             row = (await s.execute(
                 select(PlatformUser).where(PlatformUser.email == email)
@@ -67,8 +71,10 @@ class DatabaseManager:
         return {"access_token": token, "refresh_token": token,
                 "user": {"id": str(row.id), "email": email, "name": row.name}}
 
-    async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
-        import jwt as pyjwt, os
+    async def refresh_token(self, refresh_token: str) -> dict[str, Any]:
+        import os
+
+        import jwt as pyjwt
         payload = pyjwt.decode(refresh_token, os.getenv("SECRET_KEY", "dev"),
                                algorithms=["HS256"], options={"verify_exp": False})
         new_token = pyjwt.encode({**payload, "exp": datetime.utcnow() + timedelta(hours=24)},
@@ -76,7 +82,7 @@ class DatabaseManager:
         return {"access_token": new_token, "refresh_token": new_token,
                 "user": {"id": payload.get("sub"), "email": payload.get("email")}}
 
-    async def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_user(self, user_id: str) -> dict[str, Any] | None:
         if not _is_valid_uuid(user_id):
             return None
         from backend.models.core import PlatformUser
@@ -88,8 +94,8 @@ class DatabaseManager:
 
     # ── Session ───────────────────────────────────────────────────────────
 
-    async def create_session(self, user_id: Optional[str] = None,
-                             initial_config: Optional[Dict] = None) -> str:
+    async def create_session(self, user_id: str | None = None,
+                             initial_config: dict | None = None) -> str:
         from backend.models.core import InterviewSession, PlatformUser
         session_id = str(uuid.uuid4())
 
@@ -133,7 +139,7 @@ class DatabaseManager:
         logger.info(f"Created session: {session_id}")
         return session_id
 
-    async def load_session_state(self, session_id: str) -> Optional[Dict]:
+    async def load_session_state(self, session_id: str) -> dict | None:
         if not _is_valid_uuid(session_id):
             return None
         from backend.models.core import InterviewSession
@@ -155,24 +161,23 @@ class DatabaseManager:
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
-    async def save_session_state(self, session_id: str, state_data: Dict) -> bool:
+    async def save_session_state(self, session_id: str, state_data: dict) -> bool:
         if not _is_valid_uuid(session_id):
             return False
         from backend.models.core import InterviewSession
-        meta = {
-            "session_config":        state_data.get("session_config", {}),
-            "conversation_history":  state_data.get("conversation_history", []),
-            "per_turn_feedback_log": state_data.get("per_turn_feedback_log", []),
-            "final_summary":         state_data.get("final_summary"),
-            "session_stats":         state_data.get("session_stats", {}),
-        }
         async with _get_session() as s:
-            await s.execute(
-                update(InterviewSession)
-                .where(InterviewSession.id == uuid.UUID(session_id))
-                .values(metadata_=meta, status=state_data.get("status", "active"),
-                        updated_at=datetime.utcnow())
-            )
+            row = await s.get(InterviewSession, uuid.UUID(session_id))
+            if not row:
+                return False
+            # Merge into existing metadata — preserve any keys not in state_data
+            meta = dict(row.metadata_ or {})
+            for key in ("session_config", "conversation_history", "per_turn_feedback_log",
+                        "final_summary", "session_stats"):
+                if key in state_data:
+                    meta[key] = state_data[key]
+            row.metadata_ = meta
+            row.status = state_data.get("status", row.status)
+            row.updated_at = datetime.utcnow()
             await s.commit()
         return True
 
@@ -196,9 +201,9 @@ class DatabaseManager:
         return task_id
 
     async def update_speech_task(self, task_id: str, status: str,
-                                 progress_data: Optional[Dict] = None,
-                                 result_data: Optional[Dict] = None,
-                                 error_message: Optional[str] = None) -> bool:
+                                 progress_data: dict | None = None,
+                                 result_data: dict | None = None,
+                                 error_message: str | None = None) -> bool:
         if not _is_valid_uuid(task_id):
             return False
         from backend.models.core import SpeechTask
@@ -208,18 +213,19 @@ class DatabaseManager:
                 return False
             row.status = status
             row.error_message = error_message
-            meta = row.metadata_ or {}
+            # Copy before mutating — SQLAlchemy compares identity, not value
+            meta = dict(row.metadata_ or {})
             if progress_data is not None:
                 meta["progress_data"] = progress_data
             if result_data is not None:
                 meta["result_data"] = result_data
             row.metadata_ = meta
-            if status == "completed":
+            if status in ("completed", "failed", "error"):
                 row.completed_at = datetime.utcnow()
             await s.commit()
         return True
 
-    async def get_speech_task(self, task_id: str) -> Optional[Dict]:
+    async def get_speech_task(self, task_id: str) -> dict | None:
         if not _is_valid_uuid(task_id):
             return None
         from backend.models.core import SpeechTask
@@ -240,7 +246,7 @@ class DatabaseManager:
             "updated_at": row.completed_at.isoformat() if row.completed_at else None,
         }
 
-    async def get_user_sessions(self, user_id: str, limit: int = 50) -> List[Dict]:
+    async def get_user_sessions(self, user_id: str, limit: int = 50) -> list[dict]:
         if not _is_valid_uuid(user_id):
             return []
         from backend.models.core import InterviewSession
@@ -261,7 +267,7 @@ class DatabaseManager:
         async with _get_session() as s:
             result = await s.execute(
                 delete(SpeechTask)
-                .where(SpeechTask.status.in_(["completed", "failed"]))
+                .where(SpeechTask.status.in_(["completed", "failed", "error"]))
                 .where(SpeechTask.completed_at < cutoff)
             )
             await s.commit()

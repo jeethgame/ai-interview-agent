@@ -1,8 +1,10 @@
 # module-2-ai-interview-agent/eval_engine/reporter.py
-from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
+
 from core.state_machine import InterviewSessionState
+from pydantic import BaseModel, Field
+
 from backend.blueprint.models import InterviewBlueprint
+
 # LLMGateway replaced by Base LLMService — see callers
 
 
@@ -16,24 +18,24 @@ class CompetencyScore(BaseModel):
 class InterviewReport(BaseModel):
     session_id: str
     overall_score: float = 0
-    competency_scores: Dict[str, CompetencyScore] = Field(default_factory=dict)
-    strengths: List[str] = Field(default_factory=list)
-    weaknesses: List[str] = Field(default_factory=list)
-    not_assessed: List[str] = Field(default_factory=list)
-    recommendations: List[str] = Field(default_factory=list)
+    competency_scores: dict[str, CompetencyScore] = Field(default_factory=dict)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    not_assessed: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
     coverage_pct: float = 0.0
     # Task 8: Coaching output fields
-    key_strengths: List[str] = Field(default_factory=list)
-    areas_for_improvement: List[str] = Field(default_factory=list)
-    verdicts: Dict[str, str] = Field(default_factory=dict)
-    coaching_cards: List[dict] = Field(default_factory=list)
-    language_report: Optional[dict] = None
+    key_strengths: list[str] = Field(default_factory=list)
+    areas_for_improvement: list[str] = Field(default_factory=list)
+    verdicts: dict[str, str] = Field(default_factory=dict)
+    coaching_cards: list[dict] = Field(default_factory=list)
+    language_report: dict | None = None
     # Task 9: Readiness score, narrative, prep punch list
     readiness_score: float = 0.0
     narrative: str = ""
-    prep_list: List[dict] = Field(default_factory=list)
+    prep_list: list[dict] = Field(default_factory=list)
     # Task 7: Live resource URLs for each coaching recommendation
-    resources: List[dict] = Field(default_factory=list)
+    resources: list[dict] = Field(default_factory=list)
 
 
 STRENGTH_TO_SCORE = {"strong": 85, "moderate": 70, "weak": 50, "contradictory": 30}
@@ -48,12 +50,13 @@ async def generate_report(
     llm: LLMGateway,
 ) -> InterviewReport:
     # Lazy imports to avoid circular dependencies at module load time.
-    from eval_engine.rubric import level_for_score, coverage_pct as calc_coverage_pct
-    from eval_engine.integrity import validate_evidence, apply_anti_flattery_cap
-    from eval_engine.verifier import verify_scores
-    from eval_engine.verdict import assign_verdict
     from eval_engine.coaching import generate_coaching_card
+    from eval_engine.integrity import apply_anti_flattery_cap, validate_evidence
     from eval_engine.language_report import assess_language
+    from eval_engine.rubric import coverage_pct as calc_coverage_pct
+    from eval_engine.rubric import level_for_score
+    from eval_engine.verdict import assign_verdict
+    from eval_engine.verifier import verify_scores
 
     all_competencies = set()
     for section in blueprint.sections:
@@ -65,7 +68,7 @@ async def generate_report(
         if not validate_evidence(ev, state, blueprint)
     ]
 
-    comp_scores: Dict[str, CompetencyScore] = {}
+    comp_scores: dict[str, CompetencyScore] = {}
     for comp in all_competencies:
         evidence_for_comp = [e for e in valid_evidence if e.competency == comp]
         if not evidence_for_comp:
@@ -110,7 +113,7 @@ async def generate_report(
 
     cov = calc_coverage_pct(list(assessed), blueprint)
 
-    recommendations: List[str] = []
+    recommendations: list[str] = []
     for w in weaknesses:
         recommendations.append(
             f"Practice {w.replace('_', ' ')} scenarios with deeper technical examples"
@@ -121,7 +124,7 @@ async def generate_report(
         )
 
     # ── Task 8: Per-competency word counts (for verdict assignment) ──────────
-    words_by_comp: Dict[str, int] = {}
+    words_by_comp: dict[str, int] = {}
     for turn in state.turns:
         if turn.sender != "CANDIDATE":
             continue
@@ -130,7 +133,7 @@ async def generate_report(
             words_by_comp[comp] = words_by_comp.get(comp, 0) + len(turn.content.split())
 
     # ── Task 8: Three-tier verdicts ──────────────────────────────────────────
-    verdicts: Dict[str, str] = {
+    verdicts: dict[str, str] = {
         comp: assign_verdict(
             score=cs.score,
             evidence_count=cs.evidence_count,
@@ -143,15 +146,15 @@ async def generate_report(
     sorted_desc = sorted(comp_scores.items(), key=lambda x: x[1].score, reverse=True)
     sorted_asc = sorted(comp_scores.items(), key=lambda x: x[1].score)
 
-    key_strengths: List[str] = [
+    key_strengths: list[str] = [
         comp for comp, cs in sorted_desc[:_TOP_N] if cs.score >= 60
     ]
-    areas_for_improvement: List[str] = [
+    areas_for_improvement: list[str] = [
         comp for comp, cs in sorted_asc[:_TOP_N] if cs.score < 70
     ]
 
     # ── Task 8: Coaching cards (LLM-backed; gracefully degrades) ─────────────
-    coaching_cards: List[dict] = []
+    coaching_cards: list[dict] = []
     for comp, v in verdicts.items():
         if v in ("shaky", "couldnt_defend"):
             # Build a short transcript excerpt for this competency.
@@ -172,7 +175,7 @@ async def generate_report(
                 })
 
     # ── Task 8: Language report (LLM-backed; gracefully degrades) ────────────
-    language_report_dict: Optional[dict] = None
+    language_report_dict: dict | None = None
     try:
         lang_report = await assess_language(state.turns, llm)
         language_report_dict = lang_report.model_dump()
@@ -180,9 +183,9 @@ async def generate_report(
         language_report_dict = None
 
     # ── Task 9: Readiness score ───────────────────────────────────────────────
-    from eval_engine.readiness import calculate_readiness
     from eval_engine.narrative import generate_narrative
     from eval_engine.prep_list import generate_prep_list
+    from eval_engine.readiness import calculate_readiness
 
     readiness_score = calculate_readiness(verdicts, comp_scores)
 
@@ -210,7 +213,7 @@ async def generate_report(
     # ── Task 7: Fetch offline/live resources for weak competencies ────────────
     from eval_engine.resource_search import search_resources as _search_resources
 
-    resource_dicts: List[dict] = []
+    resource_dicts: list[dict] = []
     # Use the top-2 weaknesses as search targets to keep report generation fast.
     for weak_comp in weaknesses[:2]:
         skill_name = weak_comp.replace("_", " ")

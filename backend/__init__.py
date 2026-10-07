@@ -3,8 +3,8 @@ AI Interviewer Agent - Enhanced Backend
 This package provides a comprehensive interview preparation system with multi-agent capabilities.
 """
 
-import sys
 import os
+import sys
 
 # Ensure parent directory is in sys.path so 'import backend' works from anywhere
 current_dir = os.path.dirname(os.path.abspath(__file__))

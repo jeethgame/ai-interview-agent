@@ -5,8 +5,10 @@ Extracts the complex chain invocation and result processing logic.
 
 import json
 import logging
-from typing import Dict, Any, Optional, Callable, Union
 import re
+from collections.abc import Callable
+from typing import Any
+
 from langchain.chains.base import Chain
 
 
@@ -19,11 +21,11 @@ class ChainResultProcessor:
     def invoke_with_error_handling(
         self,
         chain: Chain,
-        inputs: Dict[str, Any],
+        inputs: dict[str, Any],
         chain_name: str = "LLM Chain",
-        output_key: Optional[str] = None,
-        default_creator: Optional[Callable[[], Any]] = None
-    ) -> Optional[Any]:
+        output_key: str | None = None,
+        default_creator: Callable[[], Any] | None = None
+    ) -> Any | None:
         """
         Invokes a LangChain chain with robust error handling and logging.
 
@@ -101,7 +103,7 @@ class ChainResultProcessor:
         # Return the full result
         return result
     
-    def _parse_json_with_fallback(self, json_string: str) -> Optional[Any]:
+    def _parse_json_with_fallback(self, json_string: str) -> Any | None:
         """Parse JSON string with fallback handling."""
         try:
             # Try extracting JSON from markdown code block

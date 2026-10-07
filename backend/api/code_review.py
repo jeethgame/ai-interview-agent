@@ -1,6 +1,6 @@
 import ast
 import json
-from typing import List, Optional
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +13,8 @@ router = APIRouter(prefix="/ai", tags=["AI Code Review & AST Complexity (Member 
 class CodeReviewRequest(BaseModel):
     code: str
     language: str = "python"
-    session_id: Optional[str] = None
-    submission_id: Optional[str] = None
+    session_id: str | None = None
+    submission_id: str | None = None
 
 class CodeReviewResponse(BaseModel):
     review_id: str
@@ -23,8 +23,8 @@ class CodeReviewResponse(BaseModel):
     cyclomatic_complexity: int
     max_loop_depth: int
     feedback: str
-    code_smells: List[str]
-    suggestions: List[str]
+    code_smells: list[str]
+    suggestions: list[str]
 
 class ASTComplexityVisitor(ast.NodeVisitor):
     """AST NodeVisitor computing Cyclomatic Complexity and nested loop depth."""

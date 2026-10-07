@@ -1,7 +1,7 @@
-import uuid
 import enum
+import uuid
 
-from sqlalchemy import Uuid, String, Enum
+from sqlalchemy import Enum, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database import Base

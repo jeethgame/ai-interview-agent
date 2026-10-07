@@ -1,7 +1,10 @@
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 from sqlalchemy import Column, DateTime, Integer, String, Text
+
 from backend.database import Base
+
 
 class Question(Base):
     """Algorithmic coding problem entity with test cases, starter code, and constraints."""

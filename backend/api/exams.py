@@ -1,6 +1,6 @@
-from datetime import datetime
 import json
-from typing import List, Optional
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -17,7 +17,7 @@ class CreateExamRequest(BaseModel):
     duration_minutes: int = 60
     seb_required: bool = True
     max_infractions: int = 3
-    question_ids: List[str] = []
+    question_ids: list[str] = []
 
 class StartAttemptRequest(BaseModel):
     candidate_id: str

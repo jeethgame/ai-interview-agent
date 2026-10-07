@@ -3,8 +3,9 @@
 Test script to verify interviewer agent fixes.
 """
 
-import sys
 import os
+import sys
+
 # Add the parent directory (backend) to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

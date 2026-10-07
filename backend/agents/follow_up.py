@@ -7,7 +7,6 @@ After reaching floor (3 probes on the same competency), the engine must move on.
 The ladder resets when the competency changes.
 """
 
-from typing import Optional
 
 LEVELS = ["surface", "push", "floor"]
 
@@ -23,7 +22,7 @@ class FollowUpLadder:
     """
 
     def __init__(self) -> None:
-        self._current_competency: Optional[str] = None
+        self._current_competency: str | None = None
         self._level_index: int = 0  # 0=surface, 1=push, 2=floor
 
     def set_competency(self, competency: str) -> None:
