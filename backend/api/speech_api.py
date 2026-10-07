@@ -548,7 +548,7 @@ def create_speech_api(app):
             except Exception as e:
                 logger.error(f"Deepgram transcript handler error: {e}")
 
-        def on_utterance_end(self_p, utterance_end=None, **kw):
+        def on_utterance_end(self_p, *args, **kw):
             # No-op: turn-based mode — only Tab press triggers LLM
             pass
 
