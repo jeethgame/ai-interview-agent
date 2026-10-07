@@ -1,7 +1,7 @@
-import enum
 import uuid
+import enum
 
-from sqlalchemy import Enum, ForeignKey, String, Text, Uuid
+from sqlalchemy import ForeignKey, Uuid, String, Enum, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database import Base
@@ -12,8 +12,7 @@ class SessionStage(str, enum.Enum):
     CODING_TOOL = "CODING_TOOL"
     EVALUATING = "EVALUATING"
 
-
-class LegacySession(Base):
+class CodingInterviewSession(Base):
     __tablename__ = "sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(

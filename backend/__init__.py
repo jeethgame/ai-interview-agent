@@ -26,7 +26,7 @@ except ImportError:
 
 try:
     import langchain.prompts
-except ImportError:
+except ImportError: 
     try:
         import langchain_core.prompts
         sys.modules['langchain.prompts'] = langchain_core.prompts

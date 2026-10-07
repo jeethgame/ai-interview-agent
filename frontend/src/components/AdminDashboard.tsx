@@ -4,20 +4,15 @@
  * Raw transcripts/answers are NEVER shown (anonymised per DPDPA).
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { BarChart3, Users, Building2, Target, TrendingUp, Plus, RefreshCw, FileSpreadsheet, Upload } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart3, Users, Building2, Target, TrendingUp, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL ?? '';
+const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
-async function apiFetch(path: string, token?: string, opts: RequestInit = {}) {
+async function apiFetch(path: string, token?: string) {
   const r = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
+    headers: { Authorization: token ? `Bearer ${token}` : '' },
   });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
@@ -58,24 +53,6 @@ interface DriveRow {
   completed_count: number;
 }
 
-interface ExamRow {
-  id: string;
-  title: string;
-  description: string | null;
-  duration_minutes: number;
-  seb_required: boolean;
-  is_active: boolean;
-  assigned_count: number;
-}
-
-interface CohortOption {
-  id: string;
-  name: string;
-  academic_year: string | null;
-  department: string | null;
-  member_count: number;
-}
-
 interface Props {
   orgId: string;
   token?: string;
@@ -113,36 +90,22 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
   const [cohorts, setCohorts] = useState<CohortRow[]>([]);
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [drives, setDrives] = useState<DriveRow[]>([]);
-  const [exams, setExams] = useState<ExamRow[]>([]);
-  const [cohortOptions, setCohortOptions] = useState<CohortOption[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'candidates' | 'drives' | 'exams'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'candidates' | 'drives'>('overview');
   const [loading, setLoading] = useState(true);
-  const [showCreateDrive, setShowCreateDrive] = useState(false);
-  const [allocatingDriveId, setAllocatingDriveId] = useState<string | null>(null);
-  const [allocCandidates, setAllocCandidates] = useState<string[]>([]);
-  const [assigningExamId, setAssigningExamId] = useState<string | null>(null);
-  const [assignEmail, setAssignEmail] = useState('');
-  const [assignCohorts, setAssignCohorts] = useState<string[]>([]);
-  const [assignResult, setAssignResult] = useState<string | null>(null);
-  const csvRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [s, c, cands, d, ex, co] = await Promise.all([
-        apiFetch(`/orgs/${orgId}/stats`, token).catch(() => null),
-        apiFetch(`/orgs/${orgId}/analytics/overview`, token).catch(() => []),
-        apiFetch(`/orgs/${orgId}/analytics/candidates`, token).catch(() => []),
-        apiFetch(`/orgs/${orgId}/drives`, token).catch(() => []),
-        apiFetch(`/orgs/${orgId}/exams`, token).catch(() => []),
-        apiFetch(`/orgs/${orgId}/cohorts`, token).catch(() => []),
+      const [s, c, cands, d] = await Promise.all([
+        apiFetch(`/orgs/${orgId}/stats`, token),
+        apiFetch(`/orgs/${orgId}/analytics/overview`, token),
+        apiFetch(`/orgs/${orgId}/analytics/candidates`, token),
+        apiFetch(`/orgs/${orgId}/drives`, token),
       ]);
       setStats(s);
       setCohorts(c);
       setCandidates(cands);
       setDrives(d);
-      setExams(ex);
-      setCohortOptions(co);
     } catch (e) {
       console.error('Dashboard load failed:', e);
     } finally {
@@ -180,7 +143,7 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
 
       {/* Tab nav */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        {(['overview', 'candidates', 'drives', 'exams'] as const).map(tab => (
+        {(['overview', 'candidates', 'drives'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -277,9 +240,6 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-bold text-gray-800">Placement Drives</h2>
-            <Button size="sm" onClick={() => setShowCreateDrive(true)} className="gap-1.5 bg-[#DC2626] hover:bg-[#B91C1C]">
-              <Plus size={14} /> Create Drive
-            </Button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -290,12 +250,11 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-right">Allocated</th>
                 <th className="px-4 py-3 text-right">Completed</th>
-                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {drives.length === 0 ? (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400">No drives yet</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">No drives yet</td></tr>
               ) : drives.map(d => (
                 <tr key={d.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-3 font-medium text-gray-800">{d.title}</td>
@@ -310,241 +269,10 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">{d.allocated_count}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-800">{d.completed_count}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => { setAllocatingDriveId(d.id); setAllocCandidates([]); }}
-                      className="text-xs font-semibold text-[#DC2626] hover:underline">Allocate</button>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Exams tab */}
-      {activeTab === 'exams' && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-bold text-gray-800 flex items-center gap-2">
-              <FileSpreadsheet size={16} /> Exams
-            </h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-6 py-3 text-left">Title</th>
-                <th className="px-4 py-3 text-right">Duration</th>
-                <th className="px-4 py-3 text-right">Assigned</th>
-                <th className="px-4 py-3 text-left">SEB</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {exams.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">
-                  No exams yet — create one via <code className="bg-gray-100 px-1 rounded text-xs">POST /exams/create</code>
-                </td></tr>
-              ) : exams.map(ex => (
-                <tr key={ex.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-3 font-medium text-gray-800">{ex.title}</td>
-                  <td className="px-4 py-3 text-right text-gray-600">{ex.duration_minutes}m</td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-800">{ex.assigned_count}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      ex.seb_required ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
-                    }`}>{ex.seb_required ? 'Required' : 'Off'}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => { setAssigningExamId(ex.id); setAssignEmail(''); setAssignCohorts([]); setAssignResult(null); }}
-                      className="text-xs font-semibold text-[#DC2626] hover:underline">Assign</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── Exam Assignment Modal ──────────────────────────────────────── */}
-      {assigningExamId && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setAssigningExamId(null)}>
-          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-xl max-h-[85vh] overflow-y-auto">
-            <h3 className="text-lg font-black text-gray-900">Assign Exam</h3>
-
-            {/* Method 1: Single email */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">By Email</label>
-              <input value={assignEmail} onChange={e => setAssignEmail(e.target.value)}
-                placeholder="student@college.edu (comma-separated for multiple)"
-                className="w-full px-3 py-2 border rounded-xl text-sm" />
-            </div>
-
-            {/* Method 2: By cohort/batch */}
-            {cohortOptions.length > 0 && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">By Batch / Cohort</label>
-                <div className="space-y-1 max-h-40 overflow-y-auto border rounded-xl p-2">
-                  {cohortOptions.map(co => (
-                    <label key={co.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input type="checkbox" checked={assignCohorts.includes(co.id)}
-                        onChange={e => setAssignCohorts(prev => e.target.checked ? [...prev, co.id] : prev.filter(id => id !== co.id))}
-                        className="rounded border-gray-300" />
-                      <span className="text-sm text-gray-800">{co.name}</span>
-                      {co.academic_year && <span className="text-xs text-gray-400">{co.academic_year}</span>}
-                      {co.department && <span className="text-xs text-gray-400">· {co.department}</span>}
-                      <span className="text-xs text-gray-400 ml-auto">{co.member_count} students</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Method 3: CSV upload */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Bulk Upload (CSV)</label>
-              <input ref={csvRef} type="file" accept=".csv" className="text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
-              <p className="text-xs text-gray-400 mt-1">CSV with an "email" column, or one email per line</p>
-            </div>
-
-            {/* Result message */}
-            {assignResult && (
-              <div className="px-3 py-2 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">{assignResult}</div>
-            )}
-
-            <div className="flex gap-2 justify-end pt-2">
-              <Button variant="outline" size="sm" onClick={() => setAssigningExamId(null)}>Cancel</Button>
-
-              {/* CSV upload button */}
-              <Button variant="outline" size="sm" className="gap-1.5"
-                onClick={async () => {
-                  const file = csvRef.current?.files?.[0];
-                  if (!file) return;
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  try {
-                    const r = await fetch(`${API}/orgs/${orgId}/exams/${assigningExamId}/assign/csv`, {
-                      method: 'POST',
-                      headers: token ? { Authorization: `Bearer ${token}` } : {},
-                      body: fd,
-                    });
-                    const data = await r.json();
-                    setAssignResult(`CSV: ${data.assigned} assigned, ${data.skipped} skipped${data.not_found_emails?.length ? `, not found: ${data.not_found_emails.join(', ')}` : ''}`);
-                    load();
-                  } catch (err) { console.error('CSV assign failed', err); }
-                }}>
-                <Upload size={14} /> Upload CSV
-              </Button>
-
-              {/* Assign by email + cohort */}
-              <Button size="sm" className="bg-[#DC2626] hover:bg-[#B91C1C]"
-                disabled={!assignEmail.trim() && assignCohorts.length === 0}
-                onClick={async () => {
-                  const emails = assignEmail.split(',').map(e => e.trim()).filter(e => e.includes('@'));
-                  try {
-                    const data = await apiFetch(`/orgs/${orgId}/exams/${assigningExamId}/assign`, token, {
-                      method: 'POST',
-                      body: JSON.stringify({ emails, cohort_ids: assignCohorts }),
-                    });
-                    setAssignResult(`${data.assigned} assigned, ${data.skipped} skipped${data.not_found_emails?.length ? `. Not found: ${data.not_found_emails.join(', ')}` : ''}`);
-                    setAssignEmail('');
-                    setAssignCohorts([]);
-                    load();
-                  } catch (err) { console.error('Assign failed', err); }
-                }}>
-                Assign
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Create Drive Modal ──────────────────────────────────────────── */}
-      {showCreateDrive && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowCreateDrive(false)}>
-          <form onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 shadow-xl"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              try {
-                await apiFetch(`/orgs/${orgId}/drives`, token, {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    title: fd.get('title'), target_role: fd.get('target_role'),
-                    company: fd.get('company') || null, interview_style: fd.get('interview_style'),
-                    difficulty: fd.get('difficulty'), duration_minutes: Number(fd.get('duration_minutes') || 30),
-                  }),
-                });
-                setShowCreateDrive(false);
-                load();
-              } catch (err) { console.error('Create drive failed', err); }
-            }}>
-            <h3 className="text-lg font-black text-gray-900">Create Placement Drive</h3>
-            <input name="title" required placeholder="Drive title" className="w-full px-3 py-2 border rounded-xl text-sm" />
-            <input name="target_role" required placeholder="Target role (e.g. Software Engineer)" className="w-full px-3 py-2 border rounded-xl text-sm" />
-            <input name="company" placeholder="Company (optional)" className="w-full px-3 py-2 border rounded-xl text-sm" />
-            <div className="grid grid-cols-3 gap-2">
-              <select name="interview_style" className="px-3 py-2 border rounded-xl text-sm">
-                <option value="formal">Formal</option>
-                <option value="technical">Technical</option>
-                <option value="casual">Casual</option>
-              </select>
-              <select name="difficulty" className="px-3 py-2 border rounded-xl text-sm">
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-              <input name="duration_minutes" type="number" defaultValue={30} min={5} max={120} className="px-3 py-2 border rounded-xl text-sm" />
-            </div>
-            <div className="flex gap-2 justify-end pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowCreateDrive(false)}>Cancel</Button>
-              <Button type="submit" size="sm" className="bg-[#DC2626] hover:bg-[#B91C1C]">Create</Button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ── Allocate Candidates Modal ───────────────────────────────────── */}
-      {allocatingDriveId && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setAllocatingDriveId(null)}>
-          <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 shadow-xl max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-black text-gray-900">Allocate Candidates</h3>
-            <p className="text-xs text-gray-500">Select candidates to assign to this drive.</p>
-            {candidates.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4 text-center">No candidates found in org.</p>
-            ) : (
-              <div className="space-y-1">
-                {candidates.map(c => (
-                  <label key={c.user_id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input type="checkbox" checked={allocCandidates.includes(c.user_id)}
-                      onChange={e => {
-                        setAllocCandidates(prev => e.target.checked
-                          ? [...prev, c.user_id]
-                          : prev.filter(id => id !== c.user_id));
-                      }}
-                      className="rounded border-gray-300" />
-                    <span className="text-sm text-gray-800">{c.name}</span>
-                    <span className="text-xs text-gray-400 ml-auto">{c.total_interviews} interviews</span>
-                  </label>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2 justify-end pt-2">
-              <Button variant="outline" size="sm" onClick={() => setAllocatingDriveId(null)}>Cancel</Button>
-              <Button size="sm" className="bg-[#DC2626] hover:bg-[#B91C1C]" disabled={allocCandidates.length === 0}
-                onClick={async () => {
-                  try {
-                    await apiFetch(`/orgs/${orgId}/drives/${allocatingDriveId}/allocate`, token, {
-                      method: 'POST',
-                      body: JSON.stringify({ user_ids: allocCandidates }),
-                    });
-                    setAllocatingDriveId(null);
-                    load();
-                  } catch (err) { console.error('Allocate failed', err); }
-                }}>
-                Allocate {allocCandidates.length > 0 && `(${allocCandidates.length})`}
-              </Button>
-            </div>
-          </div>
         </div>
       )}
     </div>
