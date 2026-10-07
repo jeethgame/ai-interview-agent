@@ -105,6 +105,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
 
   // "Understood" button → countdown → voice starts
   const handleInstructionsDismiss = () => {
+    startVoiceSession(); // start NOW on gesture — pre-warm during countdown
     setPhase('countdown');
     onVoiceSelect('enabled');
     let t = 3;
@@ -115,7 +116,6 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
         clearInterval(tick);
         setPhase('live');
         setSessionStartTime(Date.now());
-        startVoiceSession(); // gesture context: user just clicked "Understood"
       } else {
         setCountdown(t);
       }
