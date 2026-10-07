@@ -36,7 +36,7 @@ jobs:
       - name: Ruff lint
         # Catches syntax errors, unused imports, undefined variables.
         # Prevents deploying code that would crash on import.
-        run: pip install ruff && ruff check backend/
+        run: pip install ruff==0.16.10 && ruff check backend/
 
       - name: Pytest smoke tests
         # exit 5 = no tests collected (empty suite) — treat as pass.

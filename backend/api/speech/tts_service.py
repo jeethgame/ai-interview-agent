@@ -12,7 +12,11 @@ import random
 try:
     import boto3
     from botocore.config import Config
-    from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+    from botocore.exceptions import (
+        ClientError,
+        NoCredentialsError,
+        PartialCredentialsError,
+    )
 except ImportError:
     boto3 = None
     Config = None
