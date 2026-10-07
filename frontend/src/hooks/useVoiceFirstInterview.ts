@@ -179,11 +179,12 @@ export function useVoiceFirstInterview(
     speechRef.current?.sendEndOfTurn();
     const transcript = transcriptRef.current.trim();
     if (transcript) {
-      // Add user message to local voice chat (display only — WS handles LLM)
       setVoiceMessages(prev => [...prev, {
         role: 'user', agent: 'user', content: transcript,
         timestamp: new Date().toISOString()
       }]);
+      // Show "Thinking..." immediately — don't wait for audio to arrive
+      setTurnState('ai');
     }
     transcriptRef.current = '';
     setAccumulatedTranscript('');
