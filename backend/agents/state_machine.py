@@ -1,7 +1,8 @@
 # module-2-ai-interview-agent/core/state_machine.py
 import enum
-from typing import List, Optional
+
 from pydantic import BaseModel, Field
+
 from .decisions import InterviewEvidence
 
 
@@ -43,10 +44,10 @@ class ConversationTurn(BaseModel):
     sender: str
     content: str
     depth: ProbingDepth = ProbingDepth.INTERMEDIATE
-    verdict: Optional[TurnVerdict] = None
-    claim_referenced: Optional[str] = None
+    verdict: TurnVerdict | None = None
+    claim_referenced: str | None = None
     action_taken: str = "ASK_FOLLOWUP"
-    competency: Optional[str] = None
+    competency: str | None = None
 
 
 class InterviewSessionState(BaseModel):
@@ -56,15 +57,15 @@ class InterviewSessionState(BaseModel):
     current_section_index: int = 0
     current_competency: str = ""
     current_depth: ProbingDepth = ProbingDepth.SURFACE
-    turns: List[ConversationTurn] = Field(default_factory=list)
-    evidence: List[InterviewEvidence] = Field(default_factory=list)
-    competencies_assessed: List[str] = Field(default_factory=list)
+    turns: list[ConversationTurn] = Field(default_factory=list)
+    evidence: list[InterviewEvidence] = Field(default_factory=list)
+    competencies_assessed: list[str] = Field(default_factory=list)
     turn_count: int = 0
-    final_score: Optional[float] = None
+    final_score: float | None = None
     # Backward-compat fields (used by agent_loop.py and existing tests)
     coding_tool_invoked: bool = False
-    active_code_draft: Optional[str] = None
-    submission_id: Optional[str] = None
+    active_code_draft: str | None = None
+    submission_id: str | None = None
 
     def add_candidate_turn(self, content: str, competency: str = "", action: str = "", verdict_str: str = "SHAKY") -> ConversationTurn:
         self.turn_count += 1
@@ -147,7 +148,7 @@ class InterviewSessionState(BaseModel):
         observation: str,
         decision: str,
         ai_response: str,
-        claim_ref: Optional[str] = None,
+        claim_ref: str | None = None,
     ) -> ConversationTurn:
         """Backward-compatible turn advancement used by agent_loop.py."""
         # Determine depth and verdict from candidate input

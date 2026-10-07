@@ -4,7 +4,7 @@ Deepgram WebSocket event handlers for speech-to-text streaming.
 
 import asyncio
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from backend.utils.common import get_current_timestamp
 
@@ -19,7 +19,7 @@ class DeepgramEventHandlers:
         self.current_loop = current_loop
         self.connection_active = False
     
-    def _queue_message(self, message_data: Dict[str, Any]) -> None:
+    def _queue_message(self, message_data: dict[str, Any]) -> None:
         """Safely queue messages from sync event handlers to async context."""
         try:
             self.current_loop.call_soon_threadsafe(self.message_queue.put_nowait, message_data)

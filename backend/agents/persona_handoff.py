@@ -15,13 +15,11 @@ get_persona_for_section(section_title: str) -> str
 
 from __future__ import annotations
 
-import re
-
 from backend.agents.persona import (
-    DATABASE_SPECIALIST_PROMPT,
-    SYSTEM_DESIGN_SPECIALIST_PROMPT,
     API_SPECIALIST_PROMPT,
+    DATABASE_SPECIALIST_PROMPT,
     SKEPTICAL_STAFF_ENGINEER_PROMPT,
+    SYSTEM_DESIGN_SPECIALIST_PROMPT,
 )
 
 # ---------------------------------------------------------------------------

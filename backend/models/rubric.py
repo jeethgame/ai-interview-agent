@@ -1,7 +1,10 @@
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 from sqlalchemy import Column, DateTime, Float, String, Text
+
 from backend.database import Base
+
 
 class RubricEvaluation(Base):
     """Multi-dimensional candidate evaluation scorecard and personalized 30-day coaching roadmap."""

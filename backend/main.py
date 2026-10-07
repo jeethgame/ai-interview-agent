@@ -3,26 +3,20 @@ Main application entry point for the AI Interviewer Agent.
 Initializes the FastAPI application and routes.
 """
 
-import os
-import logging
-import tempfile
-import uuid
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-from pathlib import Path
-import json
-import sys
-from contextlib import asynccontextmanager
 import asyncio
+import json
+import logging
+import os
+import sys
+from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from backend.api.code_execution_api import create_code_execution_api
-# Pydantic imports
-from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+# Pydantic imports
+from backend.api.code_execution_api import create_code_execution_api
 
 # Ensure parent directory is in sys.path so 'import backend' works seamlessly
 _current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -56,27 +50,28 @@ except ImportError:
         pass
 
 # Local imports
-from backend.services import initialize_services, get_session_registry, get_rate_limiter
 from backend.api.agent_api import create_agent_api
-from backend.api.speech_api import create_speech_api
-from backend.api.file_processing_api import create_file_processing_api
 from backend.api.auth_api import create_auth_api
 from backend.api.blueprint_api import create_blueprint_api
-from backend.api.interview_ws import router as interview_ws_router
+from backend.api.file_processing_api import create_file_processing_api
 from backend.api.institutional_api import create_institutional_api
+from backend.api.interview_ws import router as interview_ws_router
+from backend.api.speech_api import create_speech_api
 from backend.middleware import SessionSavingMiddleware
+from backend.services import get_rate_limiter, get_session_registry, initialize_services
 
 # Team-B feature routers (coding platform, exam portal, resume, rubric)
 try:
     from backend.api.code_execution_api import create_code_execution_api
+    from backend.api.code_review import router as code_review_router
+    from backend.api.drafts import router as drafts_router
+    from backend.api.evaluations import router as evaluations_router
+    from backend.api.exams import router as exams_router
     from backend.api.execution import router as execution_router
     from backend.api.probing import router as probing_router
-    from backend.api.code_review import router as code_review_router
-    from backend.api.resumes import router as resumes_router
     from backend.api.questions import router as questions_router
-    from backend.api.exams import router as exams_router
-    from backend.api.evaluations import router as evaluations_router
-    from backend.api.drafts import router as drafts_router
+    from backend.api.resumes import router as resumes_router
+
     # sessions_router omitted — uses dormant session.py model that conflicts with core.py InterviewSession
     from backend.database import init_db
     _TEAM_B_ROUTES_AVAILABLE = True
@@ -148,6 +143,7 @@ logger.info(f"Logging configured for {'Azure' if os.environ.get('WEBSITES_PORT')
 
 # PII-safe log filter — strips sensitive fields from all log records
 import re as _re
+
 
 class _PIIFilter(logging.Filter):
     _STRIP = _re.compile(
@@ -271,8 +267,8 @@ async def root():
 async def health_check():
     """Detailed health check endpoint reporting active Amazon Nova 2 Sonic engine and environment diagnostics."""
     try:
-        from backend.config import get_environment_info
         from backend.api.speech_api import get_voice_engine
+        from backend.config import get_environment_info
 
         session_registry = get_session_registry()
         active_sessions = await session_registry.get_active_session_count()

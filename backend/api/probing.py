@@ -1,9 +1,8 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.config import settings
 from backend.database import get_db
 from backend.models.agent_turn import AgentTurn
 
@@ -12,7 +11,7 @@ router = APIRouter(prefix="/ai", tags=["Dynamic Probing Agent (Member A4)"])
 class LiveProbeRequest(BaseModel):
     session_id: str
     candidate_response: str
-    claim_context: Optional[str] = None
+    claim_context: str | None = None
     turn_index: int = 1
 
 class LiveProbeResponse(BaseModel):
@@ -25,7 +24,7 @@ class LiveProbeResponse(BaseModel):
     difficulty: str
     confidence_score: float
 
-def generate_heuristic_probe(candidate_response: str, turn_index: int, claim_context: Optional[str]) -> tuple[str, str, str, str, str, float]:
+def generate_heuristic_probe(candidate_response: str, turn_index: int, claim_context: str | None) -> tuple[str, str, str, str, str, float]:
     """Stateful heuristic fallback implementing our Observe -> Reason -> Decide -> Act loop."""
     response_lower = candidate_response.lower()
     

@@ -1,0 +1,19 @@
+[lint]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "B008",   # Depends() in default args — standard FastAPI pattern
+    "S110",   # try/except/pass — intentional suppression throughout
+    "F401",   # imported but unused — many TYPE_CHECKING / re-export patterns
+    "F841",   # local var assigned but never used — acceptable in prototypes
+    "F821",   # undefined name — LLMGateway used as forward ref in eval_engine
+    "C401",   # unnecessary generator to set()
+    "BLE001", # blind exception catch — intentional resilience pattern throughout
+    "TRY",    # try/except style rules — pre-existing patterns
+    "DTZ",    # timezone-naive datetime — pre-existing, refactor separately
+    "SIM",    # simplification suggestions — style, not bugs
+    "PERF",   # performance micro-opts — style
+    "UP",     # pyupgrade suggestions — style
+    "ASYNC",  # async-specific patterns — pre-existing
+    "RUF",    # ruff-specific rules — pre-existing
+    "PLW",    # pylint warnings — pre-existing
+]

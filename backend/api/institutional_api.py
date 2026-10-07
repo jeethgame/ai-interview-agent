@@ -31,12 +31,11 @@ Endpoints:
 
 import csv
 import io
-import uuid
 import logging
-from typing import Optional, List
+import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from backend.api.auth_api import get_current_user, require_role
@@ -50,38 +49,38 @@ router = APIRouter(prefix="/orgs", tags=["institutional"])
 class OrgCreate(BaseModel):
     name: str
     type: str = "college"
-    domain: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
+    domain: str | None = None
+    city: str | None = None
+    state: str | None = None
     country: str = "India"
 
 class OrgResponse(BaseModel):
     id: str
     name: str
     type: str
-    domain: Optional[str]
-    city: Optional[str]
+    domain: str | None
+    city: str | None
     country: str
     is_active: bool
     created_at: str
 
 class CohortCreate(BaseModel):
     name: str
-    academic_year: Optional[str] = None
-    department: Optional[str] = None
+    academic_year: str | None = None
+    department: str | None = None
 
 class CohortResponse(BaseModel):
     id: str
     name: str
-    academic_year: Optional[str]
-    department: Optional[str]
+    academic_year: str | None
+    department: str | None
     member_count: int = 0
 
 class DriveCreate(BaseModel):
     title: str
     target_role: str
-    company: Optional[str] = None
-    scheduled_at: Optional[datetime] = None
+    company: str | None = None
+    scheduled_at: datetime | None = None
     duration_minutes: int = 30
     interview_style: str = "formal"
     difficulty: str = "medium"
@@ -90,13 +89,13 @@ class DriveResponse(BaseModel):
     id: str
     title: str
     target_role: str
-    company: Optional[str]
+    company: str | None
     status: str
     allocated_count: int = 0
     completed_count: int = 0
 
 class AllocateRequest(BaseModel):
-    user_ids: List[str]
+    user_ids: list[str]
 
 
 # ── DB helper ─────────────────────────────────────────────────────────────
@@ -148,7 +147,7 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to fetch organization")
 
 
@@ -173,7 +172,7 @@ async def get_org_stats(org_id: str, user: dict = Depends(get_current_user)):
         """), {"org_id": org_id})
         row = r.mappings().fetchone()
         return dict(row) if row else {}
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to fetch stats")
 
 
@@ -193,7 +192,7 @@ async def create_cohort(org_id: str, body: CohortCreate, user: dict = Depends(ge
         await db.commit()
         return CohortResponse(id=cid, name=body.name,
                               academic_year=body.academic_year, department=body.department)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to create cohort")
 
 
@@ -211,7 +210,7 @@ async def list_cohorts(org_id: str, user: dict = Depends(get_current_user)):
             GROUP BY c.id ORDER BY c.created_at DESC
         """), {"org_id": org_id})
         return [dict(row) for row in r.mappings().fetchall()]
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to list cohorts")
 
 
@@ -237,7 +236,7 @@ async def add_cohort_members(
                 pass
         await db.commit()
         return {"added": added, "cohort_id": cohort_id}
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to add members")
 
 
@@ -264,7 +263,7 @@ async def create_drive(org_id: str, body: DriveCreate, user: dict = Depends(get_
         await db.commit()
         return DriveResponse(id=did, title=body.title, target_role=body.target_role,
                              company=body.company, status="draft")
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to create drive")
 
 
@@ -283,7 +282,7 @@ async def list_drives(org_id: str, user: dict = Depends(get_current_user)):
             GROUP BY pd.id ORDER BY pd.created_at DESC
         """), {"org_id": org_id})
         return [dict(row) for row in r.mappings().fetchall()]
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to list drives")
 
 
@@ -309,7 +308,7 @@ async def allocate_candidates(
                 pass
         await db.commit()
         return {"allocated": allocated, "drive_id": drive_id}
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to allocate candidates")
 
 
@@ -346,7 +345,7 @@ async def get_drive_results(org_id: str, drive_id: str, user: dict = Depends(get
             }
             for row in rows
         ]
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to fetch drive results")
 
 
@@ -375,14 +374,14 @@ async def analytics_overview(org_id: str, user: dict = Depends(get_current_user)
             ORDER BY c.name
         """), {"org_id": org_id})
         return [dict(row) for row in r.mappings().fetchall()]
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to fetch analytics")
 
 
 @router.get("/{org_id}/analytics/candidates")
 async def analytics_candidates(
     org_id: str,
-    cohort_id: Optional[str] = None,
+    cohort_id: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     """Per-candidate performance summary for faculty view. Anonymised — no raw transcripts."""
@@ -426,17 +425,17 @@ async def analytics_candidates(
             }
             for row in r.mappings().fetchall()
         ]
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to fetch candidate analytics")
 
 
 # ── Exam Assignment ──────────────────────────────────────────────────────
 
 class ExamAssignRequest(BaseModel):
-    user_ids: List[str] = []
-    emails: List[str] = []
-    cohort_ids: List[str] = []
-    deadline: Optional[datetime] = None
+    user_ids: list[str] = []
+    emails: list[str] = []
+    cohort_ids: list[str] = []
+    deadline: datetime | None = None
 
 
 async def _resolve_user_ids(db, user_ids: list, emails: list, cohort_ids: list) -> tuple[set, list]:

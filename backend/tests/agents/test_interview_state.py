@@ -2,8 +2,7 @@
 Test cases for agents.interview_state module.
 """
 
-import pytest
-from backend.agents.interview_state import InterviewState, InterviewPhase
+from backend.agents.interview_state import InterviewPhase, InterviewState
 
 
 class TestInterviewPhase:

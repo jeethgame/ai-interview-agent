@@ -1,6 +1,6 @@
 # module-2-ai-interview-agent/core/decisions.py
 import enum
-from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -21,12 +21,12 @@ class AgentDecision(BaseModel):
     question: str = Field(default="Could you elaborate on that?", description="The next thing the AI interviewer says")
     answer_quality: str = Field(default="partial", description="strong, partial, weak, or off_topic")
     evidence_strength: str = Field(default="moderate", description="strong, moderate, weak, or contradictory")
-    competency_coverage: List[str] = Field(default_factory=list)
-    missing_evidence: List[str] = Field(default_factory=list)
+    competency_coverage: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
     difficulty_adjustment: str = Field(default="none", description="up, down, or none")
     reasoning: str = Field(default="", description="Internal decision reasoning — not shown to candidate")
     follow_up_level: str = Field(default="surface", description="Current follow-up depth: surface, push, or floor")
-    confidence: Optional[float] = Field(default=None, description="LLM confidence 0-1")
+    confidence: float | None = Field(default=None, description="LLM confidence 0-1")
 
 
 class InterviewEvidence(BaseModel):

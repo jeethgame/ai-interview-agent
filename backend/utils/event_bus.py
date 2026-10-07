@@ -3,14 +3,15 @@ Event bus module for inter-agent communication.
 Implements a publish/subscribe pattern for event-based communication.
 """
 
-import uuid
-import json
-import threading
-from typing import Dict, List, Any, Callable, Set
-from datetime import datetime
-from dataclasses import dataclass, field, asdict
 import enum
+import json
 import logging
+import threading
+import uuid
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from typing import Any
 
 
 class EventType(str, enum.Enum):
@@ -38,11 +39,11 @@ class Event:
     """
     event_type: str
     source: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the event to a dictionary.
         
@@ -61,7 +62,7 @@ class Event:
         return json.dumps(self.to_dict())
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Event':
+    def from_dict(cls, data: dict[str, Any]) -> 'Event':
         """
         Create an event from a dictionary.
         
@@ -95,8 +96,8 @@ class EventBus:
         """
         Initialize the event bus with thread safety.
         """
-        self.subscribers: Dict[str, List[Callable[[Event], None]]] = {}
-        self.event_history: List[Event] = []
+        self.subscribers: dict[str, list[Callable[[Event], None]]] = {}
+        self.event_history: list[Event] = []
         self.max_history_size = 1000
         self.logger = logging.getLogger(__name__)
         self._lock = threading.RLock()  # Reentrant lock for thread safety
@@ -160,7 +161,7 @@ class EventBus:
             if event_type in self.subscribers and callback in self.subscribers[event_type]:
                 self.subscribers[event_type].remove(callback)
     
-    def get_event_types(self) -> Set[str]:
+    def get_event_types(self) -> set[str]:
         """
         Get all event types that have subscribers in a thread-safe manner.
         
@@ -170,7 +171,7 @@ class EventBus:
         with self._lock:
             return set(self.subscribers.keys())
     
-    def get_history(self, event_type: str = None, limit: int = 100) -> List[Event]:
+    def get_history(self, event_type: str = None, limit: int = 100) -> list[Event]:
         """
         Get the event history, optionally filtered by type, in a thread-safe manner.
         

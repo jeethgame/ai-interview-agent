@@ -3,8 +3,9 @@ Configuration models for interview sessions, decoupled from database models.
 """
 
 import enum
-from typing import Optional
+
 from pydantic import BaseModel
+
 
 class InterviewStyle(enum.Enum):
     """
@@ -21,11 +22,11 @@ class SessionConfig(BaseModel):
     Used by agents to understand the context and parameters of the interview.
     """
     job_role: str = "General Role"
-    job_description: Optional[str] = None
-    resume_content: Optional[str] = None
+    job_description: str | None = None
+    resume_content: str | None = None
     style: InterviewStyle = InterviewStyle.FORMAL
     difficulty: str = "medium"
-    target_question_count: Optional[int] = 15  # Fallback for question-based interviews
-    company_name: Optional[str] = None
-    interview_duration_minutes: Optional[int] = 10  # Default to 10-minute interviews
+    target_question_count: int | None = 15  # Fallback for question-based interviews
+    company_name: str | None = None
+    interview_duration_minutes: int | None = 10  # Default to 10-minute interviews
     use_time_based_interview: bool = True  # Enable time-based interviews by default

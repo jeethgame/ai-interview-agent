@@ -4,17 +4,19 @@ Utility functions for agents, particularly for interacting with LLMs and process
 
 import json
 import logging
-from typing import List, Dict, Any, Optional, Callable, Union
 import re
+from collections.abc import Callable
+from typing import Any
 
 from langchain.chains.base import Chain
+
 from .llm_chain_processor import create_chain_processor
 
 
 def format_conversation_history(
-    history: List[Dict[str, Any]],
-    max_messages: Optional[int] = None,
-    max_content_length: Optional[int] = None
+    history: list[dict[str, Any]],
+    max_messages: int | None = None,
+    max_content_length: int | None = None
 ) -> str:
     """Formats conversation history into a readable string for LLM prompts,
     with optional truncation by message count and content length."""
@@ -59,12 +61,12 @@ def parse_json_with_fallback(json_string: str, default_value: Any, logger: loggi
 
 def invoke_chain_with_error_handling(
     chain: Chain,
-    inputs: Dict[str, Any],
+    inputs: dict[str, Any],
     logger: logging.Logger,
     chain_name: str = "LLM Chain",
-    output_key: Optional[str] = None,
-    default_creator: Optional[Callable[[], Any]] = None
-) -> Optional[Any]:
+    output_key: str | None = None,
+    default_creator: Callable[[], Any] | None = None
+) -> Any | None:
     """
     Invokes a LangChain chain with robust error handling and logging.
     

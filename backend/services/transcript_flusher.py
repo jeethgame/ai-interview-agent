@@ -34,7 +34,7 @@ class TranscriptFlusher:
 
     def __init__(
         self,
-        state: "InterviewSessionState",
+        state: InterviewSessionState,
         flush: FlushFn,
         *,
         interval_sec: float = 20.0,

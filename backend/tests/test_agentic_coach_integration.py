@@ -7,18 +7,17 @@ This test simulates a full interview session and verifies that:
 4. The frontend receives properly formatted data
 """
 
-import pytest
-import asyncio
+import json
 import logging
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any, List
+from unittest.mock import Mock
 
+import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
 from backend.agents.agentic_coach import AgenticCoachAgent
 from backend.services.llm_service import LLMService
-from backend.services.search_service import SearchService, Resource
+from backend.services.search_service import Resource, SearchService
 from backend.utils.event_bus import EventBus
-import json
 
 
 class TestAgenticCoachIntegration:
@@ -234,7 +233,7 @@ class TestAgenticCoachIntegration:
         assert "Interactive Algorithm Visualizations" in resource_titles
         assert "Algorithm Design Manual - Free Chapters" in resource_titles
         
-        print(f"\n✅ Agentic coach integration test completed successfully!")
+        print("\n✅ Agentic coach integration test completed successfully!")
         print(f"📊 Evaluation response length: {len(evaluation)} characters")
         print(f"🎯 Summary keys: {list(final_summary.keys())}")
         print(f"📚 Learning resources found: {len(resources)}")

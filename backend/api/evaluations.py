@@ -1,6 +1,5 @@
-from datetime import datetime
 import json
-from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -13,23 +12,23 @@ router = APIRouter(prefix="/evaluations", tags=["Rubric Scorer & 30-Day Coach (M
 
 class ScoreEvaluationRequest(BaseModel):
     candidate_id: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
     correctness_score: float  # 0.0 to 10.0
     complexity_score: float   # 0.0 to 10.0
     system_design_score: float # 0.0 to 10.0
     communication_score: float # 0.0 to 10.0
     veracity_score: float      # 0.0 to 10.0
-    summary_notes: Optional[str] = ""
+    summary_notes: str | None = ""
 
 class CoachRoadmapItem(BaseModel):
     week: int
     focus: str
-    tasks: List[str]
+    tasks: list[str]
 
 class EvaluationResponse(BaseModel):
     id: str
     candidate_id: str
-    session_id: Optional[str]
+    session_id: str | None
     overall_score: float
     correctness_score: float
     complexity_score: float
@@ -37,9 +36,9 @@ class EvaluationResponse(BaseModel):
     communication_score: float
     veracity_score: float
     executive_summary: str
-    weaknesses: List[str]
-    strengths: List[str]
-    coach_roadmap_30d: List[CoachRoadmapItem]
+    weaknesses: list[str]
+    strengths: list[str]
+    coach_roadmap_30d: list[CoachRoadmapItem]
 
 def generate_personalized_roadmap(weaknesses: list[str]) -> list[dict]:
     """Assemble an actionable, anti-generic 30-day technical practice roadmap."""

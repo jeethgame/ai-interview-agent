@@ -16,12 +16,7 @@ adapted to our LLMGateway.complete_json() interface and CoachingCard shape.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    pass  # LLMGateway replaced by Base LLMService
 
 
 class CoachingCard(BaseModel):
@@ -42,7 +37,7 @@ async def generate_coaching_card(
     competency: str,
     verdict: str,
     transcript_excerpt: str,
-    llm: "LLMGateway",
+    llm: LLMGateway,
 ) -> CoachingCard:
     """Generate a Say/Avoid/Fix coaching card for one competency.
 
@@ -102,7 +97,7 @@ async def generate_coaching_card(
 async def generate_model_answer(
     competency: str,
     blueprint_context: str,
-    llm: "LLMGateway",
+    llm: LLMGateway,
 ) -> str:
     """Draft a model answer for the given competency area.
 

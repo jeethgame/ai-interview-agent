@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
 
 ROLES_DIR = Path(__file__).parent / "roles"
 
@@ -29,8 +28,8 @@ class RoleConfig:
     """
 
     name: str
-    sections: List[str] = field(default_factory=list)
-    categories: List[dict] = field(default_factory=list)
+    sections: list[str] = field(default_factory=list)
+    categories: list[dict] = field(default_factory=list)
 
 
 def load_role(name: str) -> RoleConfig:

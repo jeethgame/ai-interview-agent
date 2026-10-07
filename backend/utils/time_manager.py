@@ -3,12 +3,12 @@ Time management utility for agentic time-based interviews.
 Provides time tracking, notifications, and decision support for interview agents.
 """
 
-import time
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Callable
-from dataclasses import dataclass
-from enum import Enum
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class TimeContext:
     current_phase: TimePhase
     phase_progress: float  # Progress within current phase (0.0-1.0)
     time_pressure: str     # "low", "medium", "high"
-    suggested_actions: List[str]
+    suggested_actions: list[str]
 
 
 class InterviewTimeManager:
@@ -48,8 +48,8 @@ class InterviewTimeManager:
             duration_minutes: Total interview duration in minutes
         """
         self.duration_minutes = duration_minutes
-        self.start_time: Optional[datetime] = None
-        self.end_time: Optional[datetime] = None
+        self.start_time: datetime | None = None
+        self.end_time: datetime | None = None
         self.is_active = False
         
         # Time phase boundaries (percentage of total time)
@@ -61,7 +61,7 @@ class InterviewTimeManager:
         }
         
         # Event callbacks for time milestones
-        self.callbacks: Dict[str, List[Callable[[TimeContext], None]]] = {
+        self.callbacks: dict[str, list[Callable[[TimeContext], None]]] = {
             "phase_change": [],
             "time_warning": [],
             "halfway_point": [],
@@ -154,7 +154,7 @@ class InterviewTimeManager:
         else:
             return "high"
     
-    def _generate_time_based_suggestions(self, phase: TimePhase, progress: float, remaining: float) -> List[str]:
+    def _generate_time_based_suggestions(self, phase: TimePhase, progress: float, remaining: float) -> list[str]:
         """Generate agentic suggestions based on current time context."""
         suggestions = []
         
@@ -250,7 +250,7 @@ class InterviewTimeManager:
         else:
             return self._create_inactive_context()
     
-    def get_time_based_prompt_context(self) -> Dict[str, Any]:
+    def get_time_based_prompt_context(self) -> dict[str, Any]:
         """
         Get time context formatted for LLM prompts.
         

@@ -2,12 +2,11 @@ import asyncio
 import hashlib
 import json
 import re
-from typing import Dict, Optional
 
 from pydantic import BaseModel
 
 # PDF guard — imported here so callers can access all validation in one place
-from .file_guard import (  # noqa: F401  (re-exported for convenience)
+from .file_guard import (
     PdfValidationError,
     assert_file_size_and_page_count,
     assert_pdf_upload,
@@ -51,7 +50,7 @@ PROMPT_INJECTION_PATTERNS = [
 ]
 
 # In-memory SHA-256 hash cache for instant resume re-identification
-_HASH_CACHE: Dict[str, dict] = {}
+_HASH_CACHE: dict[str, dict] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +63,6 @@ class _IsResumeCheck(BaseModel):
 
 class PreValidationError(Exception):
     """Raised when an uploaded document fails authenticity or safety checks."""
-    pass
 
 
 class ResumePreValidator:
@@ -85,7 +83,7 @@ class ResumePreValidator:
         return hasher.hexdigest()
 
     @staticmethod
-    def get_cached_result(file_hash: str) -> Optional[dict]:
+    def get_cached_result(file_hash: str) -> dict | None:
         """Check if identical document was previously parsed."""
         return _HASH_CACHE.get(file_hash)
 
@@ -210,7 +208,7 @@ class ResumePreValidator:
 # DB-backed resume deduplication (Feature #37)
 # ---------------------------------------------------------------------------
 
-async def check_resume_dedup(file_hash: str, db) -> Optional[dict]:
+async def check_resume_dedup(file_hash: str, db) -> dict | None:
     """Check the database for a previously processed resume with the same SHA-256 hash.
 
     This is a lightweight async guard called before expensive PDF parsing.  When a
@@ -225,8 +223,8 @@ async def check_resume_dedup(file_hash: str, db) -> Optional[dict]:
         The stored scorecard dict if a matching resume_hash exists in the
         ``candidate_scorecards`` table, otherwise ``None``.
     """
-    from sqlalchemy import select
     from models.tables import CandidateScorecardRow
+    from sqlalchemy import select
 
     result = await db.execute(
         select(CandidateScorecardRow)

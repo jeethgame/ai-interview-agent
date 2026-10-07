@@ -3,21 +3,22 @@ Web search service for finding learning resources.
 Provides functionality to search for resources related to specific skills.
 """
 
-import os
-import json
 import logging
-import time
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime, timedelta
+import os
+from datetime import datetime
+from typing import Any
+
+import backoff
 import httpx
 from dotenv import load_dotenv
-import backoff 
 
-from .search_helpers import (
-    ResourceType, ResourceClassifier, RelevanceScorer, 
-    DomainQualityEvaluator, FallbackResourceGenerator
-)
 from .rate_limiting import get_rate_limiter
+from .search_helpers import (
+    DomainQualityEvaluator,
+    FallbackResourceGenerator,
+    RelevanceScorer,
+    ResourceClassifier,
+)
 
 load_dotenv()
 
@@ -28,11 +29,11 @@ SEARCH_CACHE_TTL = 3600
 class SearchProvider:
     """Base class for search providers."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize the search provider."""
         self.api_key = api_key
     
-    async def search(self, query: str, **kwargs) -> Dict[str, Any]:
+    async def search(self, query: str, **kwargs) -> dict[str, Any]:
         """
         Perform a search query.
         
@@ -49,7 +50,7 @@ class SearchProvider:
 class SerperProvider(SearchProvider):
     """Serper.dev search provider with rate limiting."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize the Serper provider."""
         super().__init__(api_key or SERPER_KEY)
         self.base_url = "https://google.serper.dev/search"
@@ -58,7 +59,7 @@ class SerperProvider(SearchProvider):
     @backoff.on_exception(backoff.expo, 
                          (httpx.HTTPError, httpx.TimeoutException),
                          max_tries=3)
-    async def search(self, query: str, **kwargs) -> Dict[str, Any]:
+    async def search(self, query: str, **kwargs) -> dict[str, Any]:
         """
         Perform a search using Serper.dev with rate limiting.
         
@@ -112,7 +113,7 @@ class Resource:
         resource_type: str,
         source: str,
         relevance_score: float = 0.0,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None
     ):
         """Initialize a resource."""
         self.title = title
@@ -123,7 +124,7 @@ class Resource:
         self.relevance_score = relevance_score
         self.metadata = metadata or {}
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "title": self.title,
@@ -144,7 +145,7 @@ class SearchService:
     
     def __init__(
         self,
-        logger: Optional[logging.Logger] = None
+        logger: logging.Logger | None = None
     ):
         """
         Initialize the search service.
@@ -171,10 +172,10 @@ class SearchService:
         self,
         skill: str,
         proficiency_level: str,
-        job_role: Optional[str] = None,
+        job_role: str | None = None,
         num_results: int = 10,
         use_cache: bool = True
-    ) -> List[Resource]:
+    ) -> list[Resource]:
         """
         Search for learning resources for a specific skill.
         
@@ -240,7 +241,7 @@ class SearchService:
         self,
         skill: str,
         proficiency_level: str,
-        job_role: Optional[str] = None
+        job_role: str | None = None
     ) -> str:
         """
         Generate search query based on parameters.
@@ -269,11 +270,11 @@ class SearchService:
     
     def _process_search_results(
         self,
-        search_results: Dict[str, Any],
+        search_results: dict[str, Any],
         skill: str,
         proficiency_level: str,
-        job_role: Optional[str] = None
-    ) -> List[Resource]:
+        job_role: str | None = None
+    ) -> list[Resource]:
         """
         Process and filter search results.
         

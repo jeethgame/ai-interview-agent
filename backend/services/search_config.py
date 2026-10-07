@@ -3,7 +3,6 @@ Search service configuration.
 Contains domain mappings, resource classifications, and proficiency level terms.
 """
 
-from typing import Dict, List, Set
 
 
 # Domain mappings for resource classification

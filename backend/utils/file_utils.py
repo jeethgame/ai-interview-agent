@@ -1,7 +1,8 @@
-import fitz  # PyMuPDF
-import docx
 import io
 import logging
+
+import docx
+import fitz  # PyMuPDF
 
 logger = logging.getLogger(__name__)
 

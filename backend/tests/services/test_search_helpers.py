@@ -3,10 +3,12 @@ Tests for search_helpers module.
 Tests the refactored helper classes extracted from search_service.py.
 """
 
-import pytest
 from backend.services.search_helpers import (
-    ResourceType, ResourceClassifier, RelevanceScorer, 
-    DomainQualityEvaluator, FallbackResourceGenerator
+    DomainQualityEvaluator,
+    FallbackResourceGenerator,
+    RelevanceScorer,
+    ResourceClassifier,
+    ResourceType,
 )
 
 

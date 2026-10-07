@@ -167,10 +167,10 @@ Question templates for the InterviewerAgent.
 Contains all the template configurations for generating generic interview questions.
 """
 
-from typing import Dict, List
+
 from backend.agents.config_models import InterviewStyle
 
-QUESTION_TEMPLATES: Dict[InterviewStyle, List[str]] = {
+QUESTION_TEMPLATES: dict[InterviewStyle, list[str]] = {
     InterviewStyle.FORMAL: [
         "Can you describe your experience with {technology}?",
         "How would you approach a situation where {scenario}?",
@@ -202,7 +202,7 @@ QUESTION_TEMPLATES: Dict[InterviewStyle, List[str]] = {
 }
 
 # Template variables organized by job role
-TEMPLATE_VARIABLES: Dict[str, Dict[str, List[str]]] = {
+TEMPLATE_VARIABLES: dict[str, dict[str, list[str]]] = {
     "Software Engineer": {
         "technology": ["React", "Python", "cloud infrastructure", "REST APIs", "microservices"],
         "scenario": ["production system failure", "changing requirements", "performance optimization"],

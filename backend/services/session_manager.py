@@ -4,15 +4,14 @@ Manages session-specific AgentSessionManager instances with database persistence
 """
 
 import asyncio
-import logging
-from typing import Dict, Optional
 from datetime import datetime, timedelta
-from backend.database.db_manager import DatabaseManager
-from backend.services.llm_service import LLMService
-from backend.utils.event_bus import EventBus
+
 from backend.agents.config_models import SessionConfig
 from backend.agents.orchestrator import AgentSessionManager
 from backend.config import get_logger
+from backend.database.db_manager import DatabaseManager
+from backend.services.llm_service import LLMService
+from backend.utils.event_bus import EventBus
 
 logger = get_logger(__name__)
 
@@ -35,11 +34,11 @@ class ThreadSafeSessionRegistry:
         self.db_manager = db_manager
         self.llm_service = llm_service
         self.event_bus = event_bus
-        self._active_sessions: Dict[str, AgentSessionManager] = {}
-        self._session_locks: Dict[str, asyncio.Lock] = {}
-        self._session_access_times: Dict[str, datetime] = {}  # Track last access time
+        self._active_sessions: dict[str, AgentSessionManager] = {}
+        self._session_locks: dict[str, asyncio.Lock] = {}
+        self._session_access_times: dict[str, datetime] = {}  # Track last access time
         self._registry_lock = asyncio.Lock()
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         logger.info("ThreadSafeSessionRegistry initialized")
 
     async def start_cleanup_task(self, cleanup_interval_minutes: int = 5, max_idle_minutes: int = 15) -> None:
@@ -122,8 +121,8 @@ class ThreadSafeSessionRegistry:
             
             return self._active_sessions[session_id]
 
-    async def create_new_session(self, user_id: Optional[str] = None, 
-                               initial_config: Optional[SessionConfig] = None) -> str:
+    async def create_new_session(self, user_id: str | None = None, 
+                               initial_config: SessionConfig | None = None) -> str:
         """
         Create a new session with default configuration.
         
@@ -280,7 +279,7 @@ class ThreadSafeSessionRegistry:
         
         return cleaned_count 
 
-    async def get_memory_usage_stats(self) -> Dict[str, int]:
+    async def get_memory_usage_stats(self) -> dict[str, int]:
         """
         Get memory usage statistics.
         
@@ -335,7 +334,7 @@ class ThreadSafeSessionRegistry:
             del self._active_sessions[session_id]
             logger.debug(f"Cleaned up active session for: {session_id}") 
 
-    async def get_session_time_remaining(self, session_id: str, max_idle_minutes: int = 15) -> Optional[int]:
+    async def get_session_time_remaining(self, session_id: str, max_idle_minutes: int = 15) -> int | None:
         """
         Get remaining time in minutes before session cleanup.
         

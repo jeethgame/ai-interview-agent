@@ -13,22 +13,21 @@ When COGNITO_USER_POOL_ID is set, uses Cognito.
 Falls back to mock JWT for local development (USE_MOCK_AUTH=true).
 """
 
-import os
-import json
-import logging
 import asyncio
+import json
+import os
 import uuid
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Any
 
 import boto3
 import httpx
-from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException, Depends, Header
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
 import jwt
+from botocore.exceptions import ClientError
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.algorithms import RSAAlgorithm
+from pydantic import BaseModel
 
 from backend.config import get_logger
 
@@ -95,8 +94,8 @@ async def _decode_token(token: str) -> dict:
 _bearer = HTTPBearer(auto_error=False)
 
 async def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-) -> Optional[Dict[str, Any]]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict[str, Any] | None:
     if not credentials or not credentials.credentials:
         return None
     try:
@@ -113,8 +112,8 @@ async def get_current_user_optional(
         return None
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-) -> Dict[str, Any]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict[str, Any]:
     if not credentials or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
@@ -136,7 +135,7 @@ async def get_current_user(
 
 def require_role(*roles):
     """Dependency factory: raises 403 if the authenticated user's role isn't in the allowed set."""
-    async def _check(user: Dict[str, Any] = Depends(get_current_user)):
+    async def _check(user: dict[str, Any] = Depends(get_current_user)):
         if user.get("role") not in roles:
             raise HTTPException(status_code=403, detail="Insufficient role")
         return user
@@ -148,8 +147,8 @@ def require_role(*roles):
 class RegisterRequest(BaseModel):
     email: str
     password: str
-    name: Optional[str] = None
-    role: Optional[str] = "candidate"
+    name: str | None = None
+    role: str | None = "candidate"
 
 class LoginRequest(BaseModel):
     email: str
@@ -162,8 +161,8 @@ class UserResponse(BaseModel):
     id: str
     email: str
     name: str
-    role: Optional[str] = "candidate"
-    created_at: Optional[datetime] = None
+    role: str | None = "candidate"
+    created_at: datetime | None = None
 
 class AuthTokenResponse(BaseModel):
     access_token: str
@@ -175,7 +174,7 @@ class MessageResponse(BaseModel):
 
 # ── Mock helpers for local dev ────────────────────────────────────────────
 
-def _mock_role(email: str, explicit_role: Optional[str] = None) -> str:
+def _mock_role(email: str, explicit_role: str | None = None) -> str:
     """Derive role from email or explicit selection for local dev."""
     if explicit_role and explicit_role.lower() in ("candidate", "faculty", "admin"):
         return explicit_role.lower()
@@ -192,8 +191,9 @@ def _stable_mock_id(email: str) -> str:
 async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
     """Upsert a platform_users row so institutional queries work in mock mode."""
     try:
-        from backend.database import get_db
         from sqlalchemy import text
+
+        from backend.database import get_db
         async for db in get_db():
             await db.execute(text(
                 "INSERT INTO platform_users (id, email, name, role, auth_provider, data_consent_given, created_at, updated_at) "
@@ -206,7 +206,7 @@ async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
         logger.error(f"platform_users upsert failed: {type(e).__name__}: {e}")
 
 
-def _mock_tokens(user_id: str, email: str, name: Optional[str] = None, role: Optional[str] = None) -> AuthTokenResponse:
+def _mock_tokens(user_id: str, email: str, name: str | None = None, role: str | None = None) -> AuthTokenResponse:
     import time
     assigned_role = _mock_role(email, role)
     display_name = name or (email.split("@")[0] if "@" in email else email)
@@ -335,11 +335,11 @@ def create_auth_api(app):
                 refresh_token=body.refresh_token,  # Cognito doesn't re-issue refresh on REFRESH flow
                 user=UserResponse(id=payload.get("sub", ""), email=payload.get("email", ""), name=""),
             )
-        except ClientError as e:
+        except ClientError:
             raise HTTPException(status_code=401, detail="Token refresh failed")
 
     @router.get("/me", response_model=UserResponse)
-    async def me(user: Dict[str, Any] = Depends(get_current_user)):
+    async def me(user: dict[str, Any] = Depends(get_current_user)):
         display_name = user.get("name") or (user["email"].split("@")[0] if "@" in user["email"] else user["email"])
         return UserResponse(
             id=user["id"],
@@ -349,7 +349,7 @@ def create_auth_api(app):
         )
 
     @router.post("/logout", response_model=MessageResponse)
-    async def logout(user: Dict[str, Any] = Depends(get_current_user)):
+    async def logout(user: dict[str, Any] = Depends(get_current_user)):
         # Cognito: revoke access token (best-effort)
         if _cognito_available():
             try:
@@ -365,15 +365,16 @@ def create_auth_api(app):
         return MessageResponse(message="Logged out successfully")
 
     @router.delete("/me/data", response_model=MessageResponse)
-    async def delete_my_data(user: Dict[str, Any] = Depends(get_current_user)):
+    async def delete_my_data(user: dict[str, Any] = Depends(get_current_user)):
         """
         DPDPA / GDPR right to deletion.
         Deletes all user data cascading through all tables.
         """
         user_id = user["id"]
         try:
-            from backend.database import get_db
             from sqlalchemy import text as sql_text
+
+            from backend.database import get_db
             async for db in get_db():
                 # Cascade deletes via FK constraints — delete top-level rows only
                 await db.execute(sql_text("DELETE FROM interview_sessions WHERE user_id = :uid"), {"uid": user_id})

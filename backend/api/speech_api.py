@@ -2,34 +2,46 @@
 Session-aware Speech API endpoints with database-backed task management and rate limiting.
 """
 
-import os
-import tempfile
-import logging
 import asyncio
-import uuid
-import random
-from typing import Dict, Any, Optional
-from pathlib import Path
-
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Form, WebSocket, Depends, Header, Query, WebSocketDisconnect
-from fastapi.responses import JSONResponse
-import httpx
-from pydantic import BaseModel, Field
-# pyrefly: ignore [missing-import]
-import jwt
 import base64
 import json
-from datetime import datetime
+import logging
+import os
+import random
+import tempfile
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+# pyrefly: ignore [missing-import]
+import jwt
 from dotenv import load_dotenv
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 # Ensure environment variables are loaded
 _env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 load_dotenv(dotenv_path=_env_path) if os.path.exists(_env_path) else load_dotenv()
 
-from .speech.tts_service import TTSService
+from backend.api.auth_api import get_current_user_optional
 from backend.database.db_manager import DatabaseManager
 from backend.services.rate_limiting import get_rate_limiter
-from backend.api.auth_api import get_current_user_optional
+
+from .speech.tts_service import TTSService
 
 _DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 _DEEPGRAM_VOICE = os.getenv("DEEPGRAM_VOICE", "aura-2-asteria-en")
@@ -50,19 +62,18 @@ async def deepgram_tts_stream(text: str):
         if _DEEPGRAM_VOICE.startswith("flux-")
         else "https://api.deepgram.com/v1/speak"
     )
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        async with client.stream(
-            "POST", endpoint,
-            params={"model": _DEEPGRAM_VOICE, "encoding": "linear16",
-                    "sample_rate": "16000", "container": "none"},
-            headers={"Authorization": f"Token {_DEEPGRAM_API_KEY}",
-                     "Content-Type": "application/json"},
-            json={"text": text},
-        ) as r:
-            r.raise_for_status()
-            async for chunk in r.aiter_bytes(chunk_size=4096):
-                if chunk:
-                    yield chunk
+    async with httpx.AsyncClient(timeout=30.0) as client, client.stream(
+        "POST", endpoint,
+        params={"model": _DEEPGRAM_VOICE, "encoding": "linear16",
+                "sample_rate": "16000", "container": "none"},
+        headers={"Authorization": f"Token {_DEEPGRAM_API_KEY}",
+                 "Content-Type": "application/json"},
+        json={"text": text},
+    ) as r:
+        r.raise_for_status()
+        async for chunk in r.aiter_bytes(chunk_size=4096):
+            if chunk:
+                yield chunk
 
 try:
     from deepgram import DeepgramClient, LiveOptions
@@ -99,13 +110,13 @@ async def get_database_manager() -> DatabaseManager:
 
 
 async def get_session_id_from_header_optional(
-    session_id: Optional[str] = Header(None, alias="X-Session-ID")
-) -> Optional[str]:
+    session_id: str | None = Header(None, alias="X-Session-ID")
+) -> str | None:
     """Extract session ID from header for speech tasks (optional)."""
     return session_id
 
 
-async def validate_websocket_token(token: str) -> Optional[Dict[str, Any]]:
+async def validate_websocket_token(token: str) -> dict[str, Any] | None:
     """
     Validate JWT token for WebSocket connections.
     Returns user data if valid, None if invalid.
@@ -153,7 +164,7 @@ async def validate_websocket_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def transcribe_audio_assemblyai(audio_file_path: str) -> Dict[str, Any]:
+async def transcribe_audio_assemblyai(audio_file_path: str) -> dict[str, Any]:
     """
     Core transcription function using AssemblyAI API.
     
@@ -312,7 +323,7 @@ async def transcribe_with_assemblyai_rate_limited(
                 # Update task with error
                 error_msg = f"Transcription failed after {max_retries} attempts"
                 if last_error:
-                    error_msg += f": {str(last_error)}"
+                    error_msg += f": {last_error!s}"
                 await db_manager.update_speech_task(
                     task_id=task_id,
                     status="error", 
@@ -363,9 +374,9 @@ def create_speech_api(app):
         background_tasks: BackgroundTasks,
         audio_file: UploadFile = File(...),
         language: str = Form("en-US"),
-        session_id: Optional[str] = Depends(get_session_id_from_header_optional),
+        session_id: str | None = Depends(get_session_id_from_header_optional),
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Transcribe uploaded audio file using AssemblyAI with database task tracking.
@@ -411,14 +422,14 @@ def create_speech_api(app):
             
         except Exception as e:
             logger.exception(f"Error processing audio file: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to process audio: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to process audio: {e!s}")
 
     @router.get("/api/speech-to-text/status/{task_id}")
     async def check_transcription_status(
         task_id: str,
-        session_id: Optional[str] = Depends(get_session_id_from_header_optional),
+        session_id: str | None = Depends(get_session_id_from_header_optional),
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Check the status of a transcription task.
@@ -470,12 +481,12 @@ def create_speech_api(app):
             raise
         except Exception as e:
             logger.exception(f"Error retrieving task status for {task_id}")
-            raise HTTPException(status_code=500, detail=f"Failed to get task status: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to get task status: {e!s}")
 
     async def _handle_deepgram_polly_stream(
         websocket: WebSocket,
-        token: Optional[str] = None,
-        session_id: Optional[str] = None
+        token: str | None = None,
+        session_id: str | None = None
     ):
         """
         Interview voice stream: Deepgram STT → LLM → Amazon Polly TTS.
@@ -524,7 +535,6 @@ def create_speech_api(app):
                 alt = result.channel.alternatives[0]
                 text = alt.transcript
                 is_final = result.is_final
-                speech_final = getattr(result, "speech_final", False)
 
                 if text:
                     loop.call_soon_threadsafe(ws_send_queue.put_nowait, {
@@ -532,23 +542,15 @@ def create_speech_api(app):
                         "text": text, "is_final": is_final
                     })
 
+                # Accumulate final text — only flushed to LLM on client_turn_complete (Tab press)
                 if is_final and text:
-                    pending_transcript[0] = text
-
-                if speech_final and pending_transcript[0]:
-                    loop.call_soon_threadsafe(
-                        transcript_queue.put_nowait, pending_transcript[0]
-                    )
-                    pending_transcript[0] = ""
+                    pending_transcript[0] = (pending_transcript[0] + ' ' + text).strip()
             except Exception as e:
                 logger.error(f"Deepgram transcript handler error: {e}")
 
         def on_utterance_end(self_p, utterance_end=None, **kw):
-            if pending_transcript[0]:
-                loop.call_soon_threadsafe(
-                    transcript_queue.put_nowait, pending_transcript[0]
-                )
-                pending_transcript[0] = ""
+            # No-op: turn-based mode — only Tab press triggers LLM
+            pass
 
         def on_error(self_p, error=None, **kw):
             logger.error(f"Deepgram error: {error}")
@@ -675,12 +677,12 @@ def create_speech_api(app):
                     msg = await websocket.receive()
                     if msg.get("type") == "websocket.disconnect":
                         break
-                    if "bytes" in msg and msg["bytes"]:
+                    if msg.get("bytes"):
                         audio_frame_count[0] += 1
                         if audio_frame_count[0] <= 5 or audio_frame_count[0] % 100 == 0:
                             logger.info(f"🎤 Audio frame #{audio_frame_count[0]}, {len(msg['bytes'])} bytes")
                         dg_conn.send(msg["bytes"])
-                    elif "text" in msg and msg["text"]:
+                    elif msg.get("text"):
                         try:
                             parsed = json.loads(msg["text"])
                             msg_type = parsed.get("type")
@@ -724,8 +726,8 @@ def create_speech_api(app):
     @router.websocket("/api/speech-to-text/stream")
     async def websocket_stream_endpoint(
         websocket: WebSocket,
-        token: Optional[str] = Query(None, description="Optional JWT token for authentication"),
-        session_id: Optional[str] = Query(None, description="Optional session ID for linking speech tasks")
+        token: str | None = Query(None, description="Optional JWT token for authentication"),
+        session_id: str | None = Query(None, description="Optional session ID for linking speech tasks")
     ):
         """Primary interview voice stream: Deepgram STT → LLM → Polly TTS."""
         await _handle_deepgram_polly_stream(websocket, token, session_id)
@@ -733,7 +735,7 @@ def create_speech_api(app):
     @router.post("/api/text-to-speech")
     async def text_to_speech(
         text: str = Form(...),
-        voice_id: Optional[str] = Form(None),
+        voice_id: str | None = Form(None),
         speed: float = Form(1.0, ge=0.5, le=2.0),
     ):
         """
@@ -752,7 +754,7 @@ def create_speech_api(app):
     @router.post("/api/text-to-speech/stream")
     async def stream_text_to_speech(
         text: str = Form(...),
-        voice_id: Optional[str] = Form(None),
+        voice_id: str | None = Form(None),
         speed: float = Form(1.0, ge=0.5, le=2.0),
     ):
         """
@@ -783,7 +785,7 @@ def create_speech_api(app):
     async def start_speech_task(
         task_request: SpeechTaskRequest,
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Start a new speech processing task.
@@ -807,7 +809,7 @@ def create_speech_api(app):
     async def get_speech_task_status(
         task_id: str,
         db_manager: DatabaseManager = Depends(get_database_manager),
-        current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+        current_user: dict[str, Any] | None = Depends(get_current_user_optional)
     ):
         """
         Get the status of a speech processing task.
@@ -842,7 +844,7 @@ def create_speech_api(app):
 class SpeechTaskRequest(BaseModel):
     """Request model for starting a speech task."""
     task_type: str = Field("transcription", description="Type of speech task")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional task metadata")
+    metadata: dict[str, Any] | None = Field(None, description="Additional task metadata")
 
 class SpeechTaskResponse(BaseModel):
     """Response model for speech task creation."""
@@ -853,7 +855,7 @@ class SpeechTaskStatusResponse(BaseModel):
     """Response model for speech task status."""
     task_id: str = Field(..., description="Unique task identifier")
     status: str = Field(..., description="Task status")
-    result: Optional[Dict[str, Any]] = Field(None, description="Task result data")
-    error: Optional[str] = Field(None, description="Error message if failed")
-    created_at: Optional[str] = Field(None, description="Task creation timestamp")
-    completed_at: Optional[str] = Field(None, description="Task completion timestamp") 
+    result: dict[str, Any] | None = Field(None, description="Task result data")
+    error: str | None = Field(None, description="Error message if failed")
+    created_at: str | None = Field(None, description="Task creation timestamp")
+    completed_at: str | None = Field(None, description="Task completion timestamp") 

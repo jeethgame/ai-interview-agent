@@ -8,8 +8,9 @@ from dotenv import load_dotenv
 _env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 load_dotenv(dotenv_path=_env_path) if os.path.exists(_env_path) else load_dotenv()
 
-from backend.database import Base, _engine as engine, _db_url as DATABASE_URL
-import backend.models  # registers all model metadata with Base
+from backend.database import Base
+from backend.database import _db_url as DATABASE_URL
+from backend.database import _engine as engine
 
 config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))

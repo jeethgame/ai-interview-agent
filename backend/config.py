@@ -1,8 +1,8 @@
 import os
-from pydantic import BaseModel
-from dotenv import load_dotenv
 from pathlib import Path
-import os
+
+from dotenv import load_dotenv
+from pydantic import BaseModel
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 

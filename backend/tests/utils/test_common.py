@@ -2,8 +2,8 @@
 Test cases for utils.common module.
 """
 
-import pytest
 from datetime import datetime
+
 from backend.utils.common import get_current_timestamp, safe_get_or_default
 
 

@@ -1,7 +1,7 @@
 import json
 import re
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,9 +57,9 @@ class ParseResumeTextRequest(BaseModel):
 class ResumeClaimResponse(BaseModel):
     id: str
     user_id: str
-    skills: List[str]
-    projects: List[str]
-    claims: List[str]
+    skills: list[str]
+    projects: list[str]
+    claims: list[str]
 
 @router.post("/parse", response_model=ResumeClaimResponse)
 async def parse_resume(req: ParseResumeTextRequest, db: AsyncSession = Depends(get_db)):

@@ -2,7 +2,6 @@
 Interview state management for the InterviewerAgent.
 """
 
-from typing import List, Optional
 from enum import Enum
 
 
@@ -22,10 +21,10 @@ class InterviewState:
     
     def __init__(self):
         self.phase = InterviewPhase.INITIALIZING
-        self.initial_questions: List[str] = []
+        self.initial_questions: list[str] = []
         self.asked_question_count = 0
-        self.current_question: Optional[str] = None
-        self.areas_covered: List[str] = []
+        self.current_question: str | None = None
+        self.areas_covered: list[str] = []
     
     def reset(self) -> None:
         """Reset all state to initial values."""
@@ -35,7 +34,7 @@ class InterviewState:
         self.current_question = None
         self.areas_covered = []
     
-    def set_questions(self, questions: List[str]) -> None:
+    def set_questions(self, questions: list[str]) -> None:
         """Set the initial questions list."""
         self.initial_questions = questions
     
@@ -44,7 +43,7 @@ class InterviewState:
         self.current_question = question
         self.asked_question_count += 1
     
-    def add_covered_topics(self, topics: List[str]) -> None:
+    def add_covered_topics(self, topics: list[str]) -> None:
         """Add newly covered topics to the areas_covered list."""
         for topic in topics:
             if topic not in self.areas_covered:

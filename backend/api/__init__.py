@@ -4,6 +4,7 @@ Defines REST endpoints for interacting with the application.
 """
 
 import logging
+
 from fastapi import FastAPI
 
 from backend.api.agent_api import create_agent_api

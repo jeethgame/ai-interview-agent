@@ -46,7 +46,7 @@ class PrepItem(BaseModel):
     estimated_hours: float
 
 
-def generate_prep_list(report: "InterviewReport") -> list[PrepItem]:
+def generate_prep_list(report: InterviewReport) -> list[PrepItem]:
     """Generate a prioritised prep punch list sorted by competency gap.
 
     Competencies with the lowest scores are listed first (priority 1 is the

@@ -7,7 +7,7 @@ Written fresh for this platform — not lifted from any cloned repo.
 """
 from __future__ import annotations
 
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.agents.decisions import InterviewEvidence
@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 
 
 def validate_evidence(
-    evidence: "InterviewEvidence",
-    state: "InterviewSessionState",
-    blueprint: "InterviewBlueprint",
-) -> List[str]:
+    evidence: InterviewEvidence,
+    state: InterviewSessionState,
+    blueprint: InterviewBlueprint,
+) -> list[str]:
     """Run 5 integrity guardrails against a single evidence item.
 
     Returns a list of human-readable violation strings (empty list = valid).
@@ -35,7 +35,7 @@ def validate_evidence(
        the same competency carries 'contradictory' strength (checked across all
        state evidence).
     """
-    violations: List[str] = []
+    violations: list[str] = []
 
     # Build turn lookup by index for O(1) access
     turn_by_index = {t.turn_index: t for t in state.turns}
@@ -100,7 +100,7 @@ def validate_evidence(
 
 def apply_anti_flattery_cap(
     proposed_overall: float,
-    competency_scores: List[float],
+    competency_scores: list[float],
 ) -> float:
     """Cap overall_score at the 85th-percentile of individual competency scores.
 

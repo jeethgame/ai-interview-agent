@@ -10,22 +10,24 @@ Zero LLM calls. Responsible for:
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-from backend.utils.event_bus import Event, EventBus, EventType
-from backend.agents.config_models import InterviewStyle, SessionConfig
+from backend.agents.config_models import InterviewStyle
+from backend.agents.constants import (
+    DEFAULT_COMPANY_NAME,
+    DEFAULT_JOB_ROLE,
+    DEFAULT_VALUE_NOT_PROVIDED,
+    ESTIMATED_TIME_PER_QUESTION,
+    MINIMUM_QUESTION_COUNT,
+)
+from backend.agents.interview_state import InterviewPhase, InterviewState
 from backend.agents.templates.interviewer_templates import (
     INTERVIEWER_SYSTEM_PROMPT,
     INTRODUCTION_TEMPLATES,
 )
-from backend.utils.common import get_current_timestamp, safe_get_or_default
+from backend.utils.common import safe_get_or_default
+from backend.utils.event_bus import Event, EventBus, EventType
 from backend.utils.time_manager import InterviewTimeManager, TimeContext, TimePhase
-from backend.agents.constants import (
-    DEFAULT_JOB_ROLE, DEFAULT_COMPANY_NAME, DEFAULT_VALUE_NOT_PROVIDED,
-    MINIMUM_QUESTION_COUNT, ESTIMATED_TIME_PER_QUESTION,
-    ERROR_INTERVIEW_CONCLUDED, INTERVIEW_CONCLUSION
-)
-from backend.agents.interview_state import InterviewState, InterviewPhase
 
 
 class InterviewerAgent:
@@ -40,16 +42,16 @@ class InterviewerAgent:
 
     def __init__(
         self,
-        event_bus: Optional[EventBus] = None,
-        logger: Optional[logging.Logger] = None,
+        event_bus: EventBus | None = None,
+        logger: logging.Logger | None = None,
         interview_style: InterviewStyle = InterviewStyle.CASUAL,
         job_role: str = "",
         job_description: str = "",
         resume_content: str = "",
         difficulty_level: str = "medium",
-        question_count: Optional[int] = None,
-        company_name: Optional[str] = None,
-        interview_duration_minutes: Optional[int] = None,
+        question_count: int | None = None,
+        company_name: str | None = None,
+        interview_duration_minutes: int | None = None,
         use_time_based_interview: bool = False
     ):
         self.event_bus = event_bus or EventBus()
@@ -65,7 +67,7 @@ class InterviewerAgent:
 
         self.interview_duration_minutes = interview_duration_minutes
         self.use_time_based_interview = use_time_based_interview
-        self.time_manager: Optional[InterviewTimeManager] = None
+        self.time_manager: InterviewTimeManager | None = None
 
         if self.use_time_based_interview and self.interview_duration_minutes:
             self.time_manager = InterviewTimeManager(self.interview_duration_minutes)
@@ -165,7 +167,7 @@ CURRENT INTERVIEW STATE:
             if topics:
                 self.state.add_covered_topics(topics)
 
-    def _extract_topics_from_text(self, text: str) -> List[str]:
+    def _extract_topics_from_text(self, text: str) -> list[str]:
         """
         Simple keyword extraction from candidate answer for topic tracking.
         No LLM — uses basic heuristic matching against known domain terms.
@@ -217,7 +219,7 @@ CURRENT INTERVIEW STATE:
             self.time_manager.stop_interview()
             self.logger.info("Interview timer stopped")
 
-    def get_state_summary(self) -> Dict[str, Any]:
+    def get_state_summary(self) -> dict[str, Any]:
         """Return a summary of current interview state for diagnostics."""
         result = {
             "phase": self.state.phase.value,
@@ -235,7 +237,7 @@ CURRENT INTERVIEW STATE:
     # Configuration update from session events
     # ------------------------------------------------------------------
 
-    def update_config(self, config: Dict[str, Any]) -> None:
+    def update_config(self, config: dict[str, Any]) -> None:
         """Update agent configuration from a config dict."""
         if not isinstance(config, dict):
             return

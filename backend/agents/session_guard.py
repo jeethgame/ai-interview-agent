@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
+
     from backend.agents.state_machine import InterviewSessionState
 
 log = logging.getLogger(__name__)
@@ -45,8 +46,8 @@ class SessionGuard:
 
     def __init__(
         self,
-        websocket: "WebSocket",
-        state: "InterviewSessionState",
+        websocket: WebSocket,
+        state: InterviewSessionState,
         *,
         max_duration_sec: float = 1800.0,
         max_turns: int = 60,

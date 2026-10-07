@@ -1,7 +1,10 @@
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+
 from backend.database import Base
+
 
 class AgentTurn(Base):
     """Agent turn log recording our Observe -> Reason -> Decide -> Act loop transitions."""

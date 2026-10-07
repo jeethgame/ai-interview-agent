@@ -3,12 +3,17 @@ Tests for file_processing_config module.
 Tests the configuration constants and settings for file processing.
 """
 
-import pytest
 from backend.config.file_processing_config import (
-    MAX_FILE_SIZE, MAX_TEXT_CONTENT_LENGTH, MIN_TEXT_LENGTH, MAX_FILENAME_LENGTH,
-    ALLOWED_CONTENT_TYPES, ALLOWED_EXTENSIONS,
-    ENABLE_VIRUS_SCAN, QUARANTINE_SUSPICIOUS_FILES,
-    ERROR_MESSAGES, UPLOAD_RATE_LIMIT
+    ALLOWED_CONTENT_TYPES,
+    ALLOWED_EXTENSIONS,
+    ENABLE_VIRUS_SCAN,
+    ERROR_MESSAGES,
+    MAX_FILE_SIZE,
+    MAX_FILENAME_LENGTH,
+    MAX_TEXT_CONTENT_LENGTH,
+    MIN_TEXT_LENGTH,
+    QUARANTINE_SUSPICIOUS_FILES,
+    UPLOAD_RATE_LIMIT,
 )
 
 

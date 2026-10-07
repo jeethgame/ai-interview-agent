@@ -1,18 +1,16 @@
-import logging
 import io
-from typing import Dict, Optional
 
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from backend.config import get_logger
-from backend.utils.file_utils import extract_text_from_pdf, extract_text_from_docx
-from backend.utils.file_validator import create_file_validator
 from backend.config.file_processing_config import ERROR_MESSAGES
+from backend.utils.file_utils import extract_text_from_docx, extract_text_from_pdf
+from backend.utils.file_validator import create_file_validator
 
 # V2: structured resume intelligence
 try:
-    from backend.rag import ResumeParser, StructuredCandidateProfile, ResumePreValidator
+    from backend.rag import ResumeParser, ResumePreValidator, StructuredCandidateProfile
     from backend.rag.pre_validator import PreValidationError
     _RAG_AVAILABLE = True
 except ImportError:
@@ -25,10 +23,10 @@ class ResumeUploadResponse(BaseModel):
     resume_text: str
     message: str
     # V2 structured fields — None when RAG not available
-    skills: Optional[list] = None
-    claims: Optional[list] = None
-    seniority: Optional[str] = None
-    sections: Optional[dict] = None
+    skills: list | None = None
+    claims: list | None = None
+    seniority: str | None = None
+    sections: dict | None = None
 
 def create_file_processing_api(app):
     router = APIRouter(prefix="/files", tags=["File Processing"])
@@ -77,7 +75,7 @@ def create_file_processing_api(app):
                 except Exception as e:
                     logger.warning(f"RAG pipeline failed (non-fatal): {type(e).__name__}")
 
-            logger.info(f"Successfully processed resume file")  # no filename in logs (PII)
+            logger.info("Successfully processed resume file")  # no filename in logs (PII)
             return ResumeUploadResponse(
                 filename=file.filename or "unknown_file",
                 resume_text=validated_text,

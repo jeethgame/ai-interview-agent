@@ -1,18 +1,19 @@
 import json
-from typing import Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.models.session import LegacySession as InterviewSession, SessionStage
+from backend.models.session import LegacySession as InterviewSession
+from backend.models.session import SessionStage
 
 router = APIRouter(prefix="/sessions", tags=["Live Interview Room & Session State (Member A3)"])
 
 class ConnectionManager:
     """Manages active live WebSocket connections per interview room."""
     def __init__(self):
-        self.active_rooms: Dict[str, List[WebSocket]] = {}
+        self.active_rooms: dict[str, list[WebSocket]] = {}
 
     async def connect(self, session_id: str, websocket: WebSocket):
         await websocket.accept()
@@ -40,7 +41,7 @@ manager = ConnectionManager()
 
 class StartSessionRequest(BaseModel):
     candidate_id: str
-    role_title: Optional[str] = "Full Stack Software Engineer"
+    role_title: str | None = "Full Stack Software Engineer"
 
 class UpdateStageRequest(BaseModel):
     stage: SessionStage

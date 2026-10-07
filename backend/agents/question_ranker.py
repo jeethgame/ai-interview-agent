@@ -14,9 +14,8 @@ from __future__ import annotations
 
 import re
 
-from backend.blueprint.models import InterviewBlueprint
 from backend.agents.state_machine import InterviewSessionState
-
+from backend.blueprint.models import InterviewBlueprint
 
 # ---------------------------------------------------------------------------
 # Obvious / trivial question patterns — these signal low non-obviousness

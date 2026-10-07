@@ -9,14 +9,13 @@ and "technical skills" are all normalised to the same canonical key.
 """
 
 import re
-from typing import Dict
 
 # ---------------------------------------------------------------------------
 # Keyword → canonical section name mapping.
 # Longer variants must sort before shorter ones so the regex alternation
 # prefers the most specific match.
 # ---------------------------------------------------------------------------
-_SECTION_KEYWORDS: Dict[str, str] = {
+_SECTION_KEYWORDS: dict[str, str] = {
     # Experience variants
     "professional experience": "Experience",
     "work experience": "Experience",
@@ -67,7 +66,7 @@ _HEADER_RE = re.compile(
 )
 
 
-def extract_sections(text: str) -> Dict[str, str]:
+def extract_sections(text: str) -> dict[str, str]:
     """Split *text* into a ``{canonical_name: content}`` dict.
 
     Each key is the canonical section name (e.g. ``"Skills"``, ``"Projects"``).
@@ -88,7 +87,7 @@ def extract_sections(text: str) -> Dict[str, str]:
     if not matches:
         return {"Full Text": text.strip()}
 
-    sections: Dict[str, str] = {}
+    sections: dict[str, str] = {}
     for i, match in enumerate(matches):
         raw_header = match.group("header").strip()
         canonical = _SECTION_KEYWORDS.get(raw_header.lower(), raw_header.title())

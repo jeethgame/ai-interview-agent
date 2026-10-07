@@ -1,7 +1,10 @@
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+
 from backend.database import Base
+
 
 class Submission(Base):
     """Execution sandbox submission record tracking stdout, stderr, and resource bounds."""

@@ -4,15 +4,15 @@ Supports Gemini (default) and Groq (OpenAI-compatible) as coach LLM providers.
 """
 
 import os
-from typing import Optional, List, Any
+from typing import Any
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, AIMessage
-from langchain_core.outputs import ChatResult, ChatGeneration
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from backend.config import get_logger
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -34,8 +34,8 @@ class ChatOpenAICompatible(BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
@@ -89,12 +89,12 @@ class LLMService:
       - "gemini" (default): ChatGoogleGenerativeAI
     """
     def __init__(self,
-                 api_key: Optional[str] = None,
-                 model_name: Optional[str] = None,
+                 api_key: str | None = None,
+                 model_name: str | None = None,
                  temperature: float = 0.7):
         self.logger = get_logger(__name__)
         self.temperature = temperature
-        self._llm: Optional[BaseChatModel] = None
+        self._llm: BaseChatModel | None = None
 
         self.provider = os.environ.get("COACH_LLM_PROVIDER", "gemini").lower().strip()
 

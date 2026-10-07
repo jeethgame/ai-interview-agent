@@ -24,9 +24,8 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from backend.api.auth_api import _decode_token
@@ -57,7 +56,7 @@ async def _safe_send(ws: WebSocket, data: dict):
 async def interview_ws(
     websocket: WebSocket,
     session_id: str,
-    token: Optional[str] = Query(None),
+    token: str | None = Query(None),
 ):
     """
     Bidirectional WebSocket for a live interview session.

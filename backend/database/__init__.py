@@ -2,13 +2,14 @@
 Database package for handling all database operations.
 """
 
-from .db_manager import DatabaseManager
-
 # ── SQLAlchemy async engine for team-B platform endpoints ──
 import os
 from collections.abc import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
+
+from .db_manager import DatabaseManager
 
 _db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./project08.db")
 _qb_url = os.getenv("QUESTION_BANK_DATABASE_URL", "")
@@ -91,4 +92,4 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS ix_scorecard_user ON candidate_scorecards(user_id)"
         ))
 
-__all__ = ["DatabaseManager", "get_db", "get_question_bank_db", "init_db", "Base"]
+__all__ = ["Base", "DatabaseManager", "get_db", "get_question_bank_db", "init_db"]

@@ -3,19 +3,17 @@ Base agent module.
 Provides the foundation for all specialized agents in the system.
 """
 
-import os
-import json
-import uuid
-from typing import Dict, Any, List, Optional, Callable
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from backend.utils.event_bus import EventBus, Event, EventType
 from backend.agents.config_models import SessionConfig
 from backend.services.llm_service import LLMService
+from backend.utils.event_bus import Event, EventBus, EventType
 
 
 class AgentContext:
@@ -25,11 +23,11 @@ class AgentContext:
     """
     def __init__(self,
                  session_id: str,
-                 conversation_history: List[Dict[str, Any]],
+                 conversation_history: list[dict[str, Any]],
                  session_config: SessionConfig,
                  event_bus: EventBus,
                  logger: logging.Logger,
-                 metadata: Optional[Dict[str, Any]] = None
+                 metadata: dict[str, Any] | None = None
                  ):
         self.session_id = session_id
         self.conversation_history = conversation_history
@@ -39,7 +37,7 @@ class AgentContext:
         self.metadata = metadata or {}
         self.created_at = datetime.now(timezone.utc)
 
-    def get_last_user_message(self) -> Optional[str]:
+    def get_last_user_message(self) -> str | None:
         """Gets the content of the last user message in the history."""
         for message in reversed(self.conversation_history):
             if message.get("role") == "user":
@@ -61,7 +59,7 @@ class AgentContext:
         
         return history.strip()
     
-    def get_langchain_messages(self) -> List[Any]:
+    def get_langchain_messages(self) -> list[Any]:
         """
         Convert conversation history to LangChain message format.
         
@@ -80,7 +78,7 @@ class AgentContext:
                 messages.append(SystemMessage(content=content))
         return messages
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the context to a dictionary (for logging/serialization if needed).
         Note: event_bus and logger are not typically serialized.
@@ -113,8 +111,8 @@ class BaseAgent(ABC):
     """
     def __init__(self,
                  llm_service: LLMService,
-                 event_bus: Optional[EventBus] = None,
-                 logger: Optional[logging.Logger] = None):
+                 event_bus: EventBus | None = None,
+                 logger: logging.Logger | None = None):
         """
         Initialize the base agent.
         
@@ -158,9 +156,8 @@ class BaseAgent(ABC):
             The result of the agent's processing (e.g., response text, structured data).
             The exact type depends on the specific agent implementation.
         """
-        pass
     
-    def publish_event(self, event_type: EventType, data: Dict[str, Any]) -> None:
+    def publish_event(self, event_type: EventType, data: dict[str, Any]) -> None:
         """
         Publish an event to the event bus.
         

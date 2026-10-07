@@ -3,9 +3,8 @@ Test runner for comprehensive backend refactoring verification.
 Runs all tests for refactored components and provides a summary.
 """
 
-import sys
 import subprocess
-import os
+import sys
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -90,7 +89,7 @@ def run_tests():
                         break
                         
         except Exception as e:
-            results[module] = f"❌ ERROR: {str(e)}"
+            results[module] = f"❌ ERROR: {e!s}"
         
         print(f"   {results[module].split(chr(10))[0]}")  # First line only
         print()

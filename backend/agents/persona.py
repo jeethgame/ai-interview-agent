@@ -112,7 +112,7 @@ HARD RULES:
 # ---------------------------------------------------------------------------
 # Import here to keep persona.py as the single public surface for prompt
 # construction; callers use get_style_modifier() directly if needed.
-from .interview_styles import InterviewStyle, get_style_modifier  # noqa: E402
+from .interview_styles import InterviewStyle, get_style_modifier
 
 
 def build_styled_prompt(base_prompt: str, style: InterviewStyle) -> str:

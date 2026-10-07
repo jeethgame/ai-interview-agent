@@ -3,7 +3,6 @@ File processing configuration.
 Contains file size limits, allowed types, and security settings.
 """
 
-from typing import Set
 
 # File size limits (in bytes)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB

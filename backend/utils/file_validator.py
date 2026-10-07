@@ -2,21 +2,26 @@
 File validation utilities for secure file processing.
 """
 
-import os
 import logging
-from typing import Tuple, Optional
-from fastapi import UploadFile, HTTPException
+import os
+
+from fastapi import HTTPException, UploadFile
 
 from backend.config.file_processing_config import (
-    MAX_FILE_SIZE, MAX_TEXT_CONTENT_LENGTH, MIN_TEXT_LENGTH, MAX_FILENAME_LENGTH,
-    ALLOWED_CONTENT_TYPES, ALLOWED_EXTENSIONS, ERROR_MESSAGES
+    ALLOWED_CONTENT_TYPES,
+    ALLOWED_EXTENSIONS,
+    ERROR_MESSAGES,
+    MAX_FILE_SIZE,
+    MAX_FILENAME_LENGTH,
+    MAX_TEXT_CONTENT_LENGTH,
+    MIN_TEXT_LENGTH,
 )
 
 
 class FileValidator:
     """Handles file validation for security and compliance."""
     
-    def __init__(self, logger: Optional[logging.Logger] = None):
+    def __init__(self, logger: logging.Logger | None = None):
         self.logger = logger or logging.getLogger(__name__)
     
     def validate_upload(self, file: UploadFile) -> None:
@@ -93,7 +98,7 @@ class FileValidator:
         self.logger.debug(f"Text content from {filename} validated: {len(clean_text)} characters")
         return clean_text
     
-    def _validate_filename(self, filename: Optional[str]) -> None:
+    def _validate_filename(self, filename: str | None) -> None:
         """Validate filename security and length."""
         if not filename:
             raise HTTPException(
@@ -115,7 +120,7 @@ class FileValidator:
                 detail="Invalid filename. Please use a simple filename without paths."
             )
     
-    def _validate_content_type(self, content_type: Optional[str]) -> None:
+    def _validate_content_type(self, content_type: str | None) -> None:
         """Validate file content type."""
         if not content_type or content_type not in ALLOWED_CONTENT_TYPES:
             self.logger.warning(f"Unsupported content type: {content_type}")
@@ -124,7 +129,7 @@ class FileValidator:
                 detail=ERROR_MESSAGES["unsupported_type"]
             )
     
-    def _validate_file_extension(self, filename: Optional[str]) -> None:
+    def _validate_file_extension(self, filename: str | None) -> None:
         """Validate file extension."""
         if not filename:
             return
@@ -159,6 +164,6 @@ class FileValidator:
         return safe_name
 
 
-def create_file_validator(logger: Optional[logging.Logger] = None) -> FileValidator:
+def create_file_validator(logger: logging.Logger | None = None) -> FileValidator:
     """Create a FileValidator instance."""
     return FileValidator(logger) 

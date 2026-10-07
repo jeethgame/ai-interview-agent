@@ -16,8 +16,8 @@ compact_summary(profile, max_words=120) -> str
 
 from __future__ import annotations
 
-from backend.blueprint.models import InterviewBlueprint
 from backend.agents.state_machine import InterviewSessionState
+from backend.blueprint.models import InterviewBlueprint
 
 # Thresholds (adapted from DeepInterview live/state.py)
 _THIN_WORDS: int = 12   # avg words below → candidate is struggling → "easier"

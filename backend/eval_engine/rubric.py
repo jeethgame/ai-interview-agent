@@ -7,7 +7,7 @@ blueprint-section denominator.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.blueprint.models import InterviewBlueprint
@@ -33,15 +33,15 @@ def level_for_score(score: float) -> str:
     return "novice"
 
 
-def merge_by_competency(scores: List[Tuple[str, float]]) -> Dict[str, float]:
+def merge_by_competency(scores: list[tuple[str, float]]) -> dict[str, float]:
     """Average raw (competency, score) pairs for duplicate competencies.
 
     Adapted from DeepInterview evaluator._merge_by_competency(). Returns a
     name-keyed dict of averaged scores in first-seen order. Useful when
     multiple interview questions target the same competency.
     """
-    buckets: Dict[str, List[float]] = {}
-    order: List[str] = []
+    buckets: dict[str, list[float]] = {}
+    order: list[str] = []
     for comp, score in scores:
         if comp not in buckets:
             buckets[comp] = []
@@ -53,7 +53,7 @@ def merge_by_competency(scores: List[Tuple[str, float]]) -> Dict[str, float]:
     }
 
 
-def coverage_pct(assessed_competencies: List[str], blueprint: "InterviewBlueprint") -> float:
+def coverage_pct(assessed_competencies: list[str], blueprint: InterviewBlueprint) -> float:
     """Fraction of blueprint competencies that received at least one evidence item.
 
     Adapted from DeepInterview report._coverage_pct() — uses blueprint sections

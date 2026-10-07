@@ -6,10 +6,10 @@ that works without Supabase for development and testing purposes.
 """
 
 import uuid
-import logging
-import jwt
-from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from typing import Any
+
+import jwt
 
 from backend.config import get_logger
 
@@ -35,7 +35,7 @@ class MockDatabaseManager:
         }
         return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
     
-    async def register_user(self, email: str, password: str, name: str) -> Dict[str, Any]:
+    async def register_user(self, email: str, password: str, name: str) -> dict[str, Any]:
         """
         Register a new user (mock implementation).
         
@@ -88,9 +88,9 @@ class MockDatabaseManager:
             
         except Exception as e:
             logger.error(f"Mock user registration failed: {e}")
-            raise Exception(f"User registration failed: {str(e)}")
+            raise Exception(f"User registration failed: {e!s}")
 
-    async def login_user(self, email: str, password: str) -> Dict[str, Any]:
+    async def login_user(self, email: str, password: str) -> dict[str, Any]:
         """
         Login a user (mock implementation).
         
@@ -138,9 +138,9 @@ class MockDatabaseManager:
             
         except Exception as e:
             logger.error(f"Mock user login failed: {e}")
-            raise Exception(f"User login failed: {str(e)}")
+            raise Exception(f"User login failed: {e!s}")
 
-    async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
+    async def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """
         Refresh an access token (mock implementation).
         
@@ -179,9 +179,9 @@ class MockDatabaseManager:
             
         except Exception as e:
             logger.error(f"Mock token refresh failed: {e}")
-            raise Exception(f"Token refresh failed: {str(e)}")
+            raise Exception(f"Token refresh failed: {e!s}")
 
-    async def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_user(self, user_id: str) -> dict[str, Any] | None:
         """
         Get a user by ID (mock implementation).
         
@@ -208,8 +208,8 @@ class MockDatabaseManager:
             logger.error(f"Error getting mock user {user_id}: {e}")
             return None
 
-    async def create_session(self, user_id: Optional[str] = None, 
-                           initial_config: Optional[Dict] = None) -> str:
+    async def create_session(self, user_id: str | None = None, 
+                           initial_config: dict | None = None) -> str:
         """
         Create a new interview session (mock implementation).
         
@@ -242,7 +242,7 @@ class MockDatabaseManager:
             logger.error(f"Error creating mock session: {e}")
             raise
 
-    async def load_session_state(self, session_id: str) -> Optional[Dict]:
+    async def load_session_state(self, session_id: str) -> dict | None:
         """
         Load complete session state from mock storage.
         
@@ -264,7 +264,7 @@ class MockDatabaseManager:
             logger.error(f"Error loading mock session state for {session_id}: {e}")
             return None
 
-    async def save_session_state(self, session_id: str, state_data: Dict) -> bool:
+    async def save_session_state(self, session_id: str, state_data: dict) -> bool:
         """
         Save session state to mock storage.
         
@@ -324,9 +324,9 @@ class MockDatabaseManager:
             raise
 
     async def update_speech_task(self, task_id: str, status: str, 
-                               progress_data: Optional[Dict] = None, 
-                               result_data: Optional[Dict] = None,
-                               error_message: Optional[str] = None) -> bool:
+                               progress_data: dict | None = None, 
+                               result_data: dict | None = None,
+                               error_message: str | None = None) -> bool:
         """
         Update speech task progress and results (mock implementation).
         
@@ -363,7 +363,7 @@ class MockDatabaseManager:
             logger.error(f"Error updating mock speech task {task_id}: {e}")
             return False
 
-    async def get_speech_task(self, task_id: str) -> Optional[Dict]:
+    async def get_speech_task(self, task_id: str) -> dict | None:
         """
         Get speech task by ID (mock implementation).
         
@@ -413,7 +413,7 @@ class MockDatabaseManager:
             logger.error(f"Error cleaning up mock tasks: {e}")
             return 0
 
-    async def get_user_sessions(self, user_id: str, limit: int = 50) -> List[Dict]:
+    async def get_user_sessions(self, user_id: str, limit: int = 50) -> list[dict]:
         """
         Get sessions for a specific user (mock implementation).
         
