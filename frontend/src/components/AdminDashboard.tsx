@@ -8,7 +8,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BarChart3, Users, Building2, Target, TrendingUp, Plus, RefreshCw, FileSpreadsheet, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8010';
+const API = (import.meta as any).env?.VITE_API_BASE_URL ?? '';
 
 async function apiFetch(path: string, token?: string, opts: RequestInit = {}) {
   const r = await fetch(`${API}${path}`, {
@@ -130,10 +130,10 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
     setLoading(true);
     try {
       const [s, c, cands, d, ex, co] = await Promise.all([
-        apiFetch(`/orgs/${orgId}/stats`, token),
-        apiFetch(`/orgs/${orgId}/analytics/overview`, token),
-        apiFetch(`/orgs/${orgId}/analytics/candidates`, token),
-        apiFetch(`/orgs/${orgId}/drives`, token),
+        apiFetch(`/orgs/${orgId}/stats`, token).catch(() => null),
+        apiFetch(`/orgs/${orgId}/analytics/overview`, token).catch(() => []),
+        apiFetch(`/orgs/${orgId}/analytics/candidates`, token).catch(() => []),
+        apiFetch(`/orgs/${orgId}/drives`, token).catch(() => []),
         apiFetch(`/orgs/${orgId}/exams`, token).catch(() => []),
         apiFetch(`/orgs/${orgId}/cohorts`, token).catch(() => []),
       ]);

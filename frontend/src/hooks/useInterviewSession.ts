@@ -199,7 +199,7 @@ export function useInterviewSession() {
     const handleBeforeUnload = () => {
       if (!sessionId) return;
 
-      const cleanupUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/interview/session/cleanup`;
+      const cleanupUrl = `${import.meta.env.VITE_API_BASE_URL ?? ''}/interview/session/cleanup`;
 
       // Prefer fetch with keepalive so we can include the required header
       try {

@@ -119,10 +119,10 @@ async def create_org(
         db = await _db()
         org_id = str(uuid.uuid4())
         await db.execute(text("""
-            INSERT INTO organizations (id, name, type, domain, city, country, created_at, updated_at)
-            VALUES (:id, :name, :type, :domain, :city, :country, NOW(), NOW())
+            INSERT INTO organizations (id, name, type, domain, city, state, country, is_active, created_at, updated_at)
+            VALUES (:id, :name, :type, :domain, :city, :state, :country, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {"id": org_id, "name": body.name, "type": body.type,
-               "domain": body.domain, "city": body.city, "country": body.country})
+               "domain": body.domain, "city": body.city, "state": body.state, "country": body.country})
         await db.commit()
         return OrgResponse(id=org_id, name=body.name, type=body.type,
                            domain=body.domain, city=body.city, country=body.country,
@@ -187,7 +187,7 @@ async def create_cohort(org_id: str, body: CohortCreate, user: dict = Depends(ge
         cid = str(uuid.uuid4())
         await db.execute(text("""
             INSERT INTO cohorts (id, org_id, name, academic_year, department, created_at)
-            VALUES (:id, :org_id, :name, :year, :dept, NOW())
+            VALUES (:id, :org_id, :name, :year, :dept, CURRENT_TIMESTAMP)
         """), {"id": cid, "org_id": org_id, "name": body.name,
                "year": body.academic_year, "dept": body.department})
         await db.commit()
@@ -229,7 +229,7 @@ async def add_cohort_members(
             try:
                 await db.execute(text("""
                     INSERT INTO cohort_members (id, cohort_id, user_id, added_at)
-                    VALUES (:id, :cohort_id, :user_id, NOW())
+                    VALUES (:id, :cohort_id, :user_id, CURRENT_TIMESTAMP)
                     ON CONFLICT (cohort_id, user_id) DO NOTHING
                 """), {"id": str(uuid.uuid4()), "cohort_id": cohort_id, "user_id": uid})
                 added += 1
@@ -255,7 +255,7 @@ async def create_drive(org_id: str, body: DriveCreate, user: dict = Depends(get_
                duration_minutes, interview_style, difficulty, status,
                created_by, created_at, updated_at)
             VALUES (:id, :org_id, :title, :role, :company, :sched,
-                    :dur, :style, :diff, 'draft', :creator, NOW(), NOW())
+                    :dur, :style, :diff, 'draft', :creator, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {"id": did, "org_id": org_id, "title": body.title,
                "role": body.target_role, "company": body.company,
                "sched": body.scheduled_at, "dur": body.duration_minutes,
@@ -301,7 +301,7 @@ async def allocate_candidates(
             try:
                 await db.execute(text("""
                     INSERT INTO drive_allocations (id, drive_id, user_id, status, allocated_at)
-                    VALUES (:id, :drive_id, :user_id, 'pending', NOW())
+                    VALUES (:id, :drive_id, :user_id, 'pending', CURRENT_TIMESTAMP)
                     ON CONFLICT (drive_id, user_id) DO NOTHING
                 """), {"id": str(uuid.uuid4()), "drive_id": drive_id, "user_id": uid})
                 allocated += 1
@@ -363,8 +363,8 @@ async def analytics_overview(org_id: str, user: dict = Depends(get_current_user)
                 c.name AS cohort_name,
                 COUNT(DISTINCT cm.user_id) AS total_students,
                 COUNT(DISTINCT s.id) AS interviews_completed,
-                ROUND(AVG(ir.overall_score)::numeric, 2) AS avg_overall_score,
-                ROUND(AVG(cs.readiness_score)::numeric, 1) AS avg_readiness
+                ROUND(AVG(ir.overall_score), 2) AS avg_overall_score,
+                ROUND(AVG(cs.readiness_score), 1) AS avg_readiness
             FROM cohorts c
             JOIN cohort_members cm ON cm.cohort_id = c.id
             LEFT JOIN interview_sessions s ON s.user_id = cm.user_id AND s.status = 'completed'
@@ -400,8 +400,8 @@ async def analytics_candidates(
                 pu.id AS user_id,
                 pu.name,
                 COUNT(DISTINCT s.id) AS total_interviews,
-                ROUND(AVG(ir.overall_score)::numeric, 2) AS avg_score,
-                ROUND(AVG(cs.readiness_score)::numeric, 1) AS avg_readiness,
+                ROUND(AVG(ir.overall_score), 2) AS avg_score,
+                ROUND(AVG(cs.readiness_score), 1) AS avg_readiness,
                 MAX(cs.rubric_band) AS best_band,
                 MAX(s.started_at) AS last_interview_at
             FROM cohort_members cm
@@ -599,7 +599,7 @@ async def get_my_assignments(user: dict = Depends(get_current_user)):
 
         exams_q = await db.execute(text("""
             SELECT ea.id, ea.status, ea.exam_id, ea.deadline,
-                   fe.title, fe.time_limit_seconds AS duration_minutes
+                   fe.title, fe.duration_minutes
             FROM exam_assignments ea
             LEFT JOIN formal_exams fe ON fe.id = ea.exam_id
             WHERE ea.user_id = :uid

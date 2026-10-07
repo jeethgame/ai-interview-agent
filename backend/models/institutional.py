@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy import JSON as JSONB  # JSONB in PostgreSQL, JSON in SQLite (local dev)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -95,6 +95,7 @@ class DriveAllocation(Base):
 
 class ExamAssignment(Base):
     __tablename__ = "exam_assignments"
+    __table_args__ = (UniqueConstraint("exam_id", "user_id", name="uq_exam_user"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     exam_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)

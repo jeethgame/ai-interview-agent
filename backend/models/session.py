@@ -13,7 +13,7 @@ class SessionStage(str, enum.Enum):
     EVALUATING = "EVALUATING"
 
 
-class InterviewSession(Base):
+class LegacySession(Base):
     __tablename__ = "sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(

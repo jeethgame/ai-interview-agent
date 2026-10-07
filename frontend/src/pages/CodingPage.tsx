@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const MonacoEditor = lazy(() => import('@/components/team_a/MonacoEditor').then(m => ({ default: m.default ?? m.MonacoEditor })));
 
 // ── Inline TestConsole (redesigned, no legacy) ─────────────────────────────
-const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8002';
+const API = (import.meta as any).env?.VITE_API_BASE_URL ?? '';
 
 interface TestResult {
   status: string;

@@ -78,8 +78,7 @@ try:
     from backend.api.exams import router as exams_router
     from backend.api.evaluations import router as evaluations_router
     from backend.api.drafts import router as drafts_router
-    from backend.api.sessions import router as sessions_router
-    from backend.api.auth import router as auth_b_router
+    # sessions_router omitted — uses dormant session.py model that conflicts with core.py InterviewSession
     from backend.database import init_db
     _TEAM_B_ROUTES_AVAILABLE = True
 except Exception as _e:
@@ -253,7 +252,6 @@ if _TEAM_B_ROUTES_AVAILABLE:
     # auth_b_router omitted — superseded by Cognito auth_api (/auth/*)
     app.include_router(drafts_router)
     app.include_router(execution_router)
-    app.include_router(sessions_router)
     app.include_router(probing_router)
     app.include_router(code_review_router)
     app.include_router(resumes_router)

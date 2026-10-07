@@ -196,14 +196,14 @@ async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
         from sqlalchemy import text
         async for db in get_db():
             await db.execute(text(
-                "INSERT INTO platform_users (id, email, name, role, auth_provider, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :role, 'mock', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "INSERT INTO platform_users (id, email, name, role, auth_provider, data_consent_given, created_at, updated_at) "
+                "VALUES (:id, :email, :name, :role, 'mock', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
                 "ON CONFLICT (email) DO UPDATE SET name = :name, role = :role, updated_at = CURRENT_TIMESTAMP"
             ), {"id": user_id, "email": email, "name": name, "role": role})
             await db.commit()
             break
     except Exception as e:
-        logger.debug(f"platform_users upsert skipped: {type(e).__name__}: {e}")
+        logger.error(f"platform_users upsert failed: {type(e).__name__}: {e}")
 
 
 def _mock_tokens(user_id: str, email: str, name: Optional[str] = None, role: Optional[str] = None) -> AuthTokenResponse:

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.models.session import InterviewSession, SessionStage
+from backend.models.session import LegacySession as InterviewSession, SessionStage
 
 router = APIRouter(prefix="/sessions", tags=["Live Interview Room & Session State (Member A3)"])
 

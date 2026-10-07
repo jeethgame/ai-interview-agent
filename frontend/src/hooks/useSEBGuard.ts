@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8001';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ?? '';
 
 export interface SEBConfig {
   examId: string;

@@ -1,5 +1,5 @@
 from backend.models.user import User, UserRole
-from backend.models.session import InterviewSession, SessionStage
+from backend.models.session import LegacySession, SessionStage
 from backend.models.draft import Draft
 
 # V4 institutional models
@@ -10,7 +10,7 @@ from backend.models.core import (
     PlatformUser,
     CandidateProfile,
     InterviewBlueprint,
-    InterviewSession as CoreInterviewSession,
+    InterviewSession,
     InterviewQuestion,
     CandidateAnswer,
     ScoreDimension,
