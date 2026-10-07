@@ -12,7 +12,10 @@ Same endpoint contract as before (frontend unchanged):
 When COGNITO_USER_POOL_ID is set, uses Cognito.
 Falls back to mock JWT for local development (USE_MOCK_AUTH=true).
 """
-
+from sqlalchemy import select
+from backend.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.models.user import User, UserRole
 import os
 import json
 import logging
@@ -181,7 +184,7 @@ def create_auth_api(app):
     router = APIRouter(prefix="/auth", tags=["auth"])
 
     @router.post("/register", response_model=AuthTokenResponse)
-    async def register(body: RegisterRequest):
+    async def login(body: LoginRequest, db: AsyncSession = Depends(get_db),):
         if not _cognito_available():
             if USE_MOCK_AUTH:
                 import uuid
@@ -227,11 +230,33 @@ def create_auth_api(app):
             raise HTTPException(status_code=400, detail=e.response["Error"]["Message"])
 
     @router.post("/login", response_model=AuthTokenResponse)
-    async def login(body: LoginRequest):
+    async def login(
+        body: LoginRequest,
+        db: AsyncSession = Depends(get_db),
+    ):
         if not _cognito_available():
             if USE_MOCK_AUTH:
-                import uuid
-                return _mock_tokens(str(uuid.uuid4()), body.email, body.email.split("@")[0])
+                result = await db.execute(
+                    select(User).where(User.email == body.email)
+                )
+                user = result.scalar_one_or_none()
+
+                if user is None:
+                    user = User(
+                        email=body.email,
+                        hashed_password="mock-password",
+                        full_name=body.email.split("@")[0],
+                        role=UserRole.CANDIDATE,
+                    )
+                    db.add(user)
+                    await db.flush()
+
+                return _mock_tokens(
+                    str(user.id),
+                    user.email,
+                    user.full_name,
+                )
+
             raise HTTPException(status_code=503, detail="Auth service not configured")
         try:
             cog = _get_cognito()

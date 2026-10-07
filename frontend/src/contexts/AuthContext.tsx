@@ -33,7 +33,7 @@ const ACCESS_TOKEN_KEY = 'aia_access_token';
 const REFRESH_TOKEN_KEY = 'aia_refresh_token';
 const USER_KEY = 'aia_user';
 
-const API_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8001';
+const API_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);

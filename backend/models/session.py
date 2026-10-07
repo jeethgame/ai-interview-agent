@@ -12,8 +12,7 @@ class SessionStage(str, enum.Enum):
     CODING_TOOL = "CODING_TOOL"
     EVALUATING = "EVALUATING"
 
-
-class InterviewSession(Base):
+class CodingInterviewSession(Base):
     __tablename__ = "sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(

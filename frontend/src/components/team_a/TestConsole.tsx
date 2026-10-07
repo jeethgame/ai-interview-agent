@@ -22,7 +22,7 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ sourceCode, sessionId,
   const handleRun = async () => {
     setRunning(true);
     try {
-      const API = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8001";
+      const API = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8000";
       const res = await fetch(`${API}/execution/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

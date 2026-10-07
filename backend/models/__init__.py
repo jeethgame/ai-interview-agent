@@ -1,5 +1,5 @@
 from backend.models.user import User, UserRole
-from backend.models.session import InterviewSession, SessionStage
+from backend.models.session import CodingInterviewSession, SessionStage
 from backend.models.draft import Draft
 
 # V4 institutional models

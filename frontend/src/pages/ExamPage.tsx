@@ -11,7 +11,7 @@ const MonacoEditor = lazy(() => import('@/components/team_a/MonacoEditor').then(
 
 type Phase = 'instructions' | 'preflight' | 'exam' | 'disqualified' | 'submitted';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8002';
+const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // Mock problem for now — will come from /api/exams/:id
 const MOCK_PROBLEM = {

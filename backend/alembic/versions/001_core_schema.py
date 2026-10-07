@@ -103,7 +103,7 @@ def upgrade() -> None:
 
     # ── 5. interview_questions ────────────────────────────────────────────
     op.create_table(
-        "interview_questions",
+        "interview_session_questions",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False),
         sa.Column("sequence_number", sa.Integer, nullable=False),
@@ -112,18 +112,18 @@ def upgrade() -> None:
         sa.Column("topic", sa.String(255)),
         sa.Column("difficulty", sa.String(50)),
         sa.Column("source", sa.String(100)),
-        sa.Column("parent_question_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("interview_questions.id", ondelete="SET NULL")),
+        sa.Column("parent_question_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("interview_session_questions.id", ondelete="SET NULL")),
         sa.Column("asked_at", sa.DateTime(timezone=True)),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("metadata", postgresql.JSONB),
     )
-    op.create_index("ix_interview_questions_session_id", "interview_questions", ["session_id"])
+    op.create_index("ix_interview_session_questions_session_id", "interview_session_questions", ["session_id"])
 
     # ── 6. candidate_answers ──────────────────────────────────────────────
     op.create_table(
         "candidate_answers",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-        sa.Column("question_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("interview_questions.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("question_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("interview_session_questions.id", ondelete="CASCADE"), nullable=False),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False),
         sa.Column("answer_text", sa.Text),
         sa.Column("transcript_status", sa.String(50), server_default="pending"),
@@ -291,7 +291,7 @@ def downgrade() -> None:
     for table in [
         "speech_tasks", "recommended_resources", "interview_reports",
         "turn_feedback", "scores", "score_dimensions",
-        "candidate_answers", "interview_questions", "interview_sessions",
+        "candidate_answers", "interview_session_questions", "interview_sessions",
         "interview_blueprints", "candidate_profiles", "platform_users",
     ]:
         op.drop_table(table)

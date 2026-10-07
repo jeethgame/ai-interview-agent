@@ -19,9 +19,7 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from backend.api.code_execution_api import create_code_execution_api
-# Pydantic imports
-from pydantic import BaseModel, Field
+
 from dotenv import load_dotenv
 
 # Ensure parent directory is in sys.path so 'import backend' works seamlessly
@@ -33,6 +31,10 @@ if _parent_dir not in sys.path:
 # Load environment variables FIRST before importing backend modules
 env_path = os.path.join(_current_dir, ".env")
 load_dotenv(dotenv_path=env_path) if os.path.exists(env_path) else load_dotenv()
+
+from backend.api.code_execution_api import create_code_execution_api
+# Pydantic imports
+from pydantic import BaseModel, Field
 
 # LangChain 1.x compatibility shim
 try:
@@ -208,9 +210,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Allowed origins — restrict in production; wildcard only for local dev
 _ALLOWED_ORIGINS = [o.strip() for o in os.getenv(
     "CORS_ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:5173,http://localhost:8080,http://localhost:8081,http://localhost:8082"
+    "http://localhost:3000,http://localhost:5173,http://localhost:8080,http://localhost:8081,http://localhost:8082,http://10.1.48.220:8080"
 ).split(",") if o.strip()]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,

@@ -8,7 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart3, Users, Building2, Target, TrendingUp, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8001';
+const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
 async function apiFetch(path: string, token?: string) {
   const r = await fetch(`${API}${path}`, {

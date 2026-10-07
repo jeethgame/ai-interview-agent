@@ -180,7 +180,7 @@ class InterviewSession(Base):
 # ── 5. interview_questions ─────────────────────────────────────────────────
 
 class InterviewQuestion(Base):
-    __tablename__ = "interview_questions"
+    __tablename__ = "interview_session_questions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False)
@@ -190,7 +190,7 @@ class InterviewQuestion(Base):
     topic: Mapped[Optional[str]] = mapped_column(String(255))
     difficulty: Mapped[Optional[str]] = mapped_column(String(50))
     source: Mapped[Optional[str]] = mapped_column(String(100))              # agent|blueprint|followup_ladder
-    parent_question_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_questions.id", ondelete="SET NULL"))
+    parent_question_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_session_questions.id", ondelete="SET NULL"))
     asked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)   # agent action, competency, probe category
@@ -206,7 +206,7 @@ class CandidateAnswer(Base):
     __tablename__ = "candidate_answers"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_questions.id", ondelete="CASCADE"), nullable=False)
+    question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),ForeignKey("interview_session_questions.id", ondelete="CASCADE"),nullable=False)
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False)
     answer_text: Mapped[Optional[str]] = mapped_column(Text)               # stored encrypted via encrypt_field()
     transcript_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending|complete|partial
@@ -215,7 +215,6 @@ class CandidateAnswer(Base):
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)   # VAD events, turn number, word count
-
     question: Mapped["InterviewQuestion"] = relationship(back_populates="answer")
     scores: Mapped[list["Score"]] = relationship(back_populates="answer", cascade="all, delete-orphan")
     turn_feedback: Mapped[list["TurnFeedback"]] = relationship(back_populates="answer", cascade="all, delete-orphan")

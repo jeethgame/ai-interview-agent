@@ -17,17 +17,17 @@ async def get_questions(
     try:
         result = await db.execute(
             text("""
-                SELECT
-                    id,
-                    title,
-                    topic,
-                    description,
-                    difficulty_level,
-                    lpa_level,
-                    examples,
-                    constraints
-                FROM public.interview_questions
-                ORDER BY id
+SELECT
+    id,
+    title,
+    topic,
+    description,
+    difficulty_level,
+    lpa_level,
+    examples,
+    constraints,
+    test_cases
+FROM public.interview_questions
             """)
         )
 
@@ -45,7 +45,7 @@ async def get_questions(
                 "difficulty": row["difficulty_level"],
                 "constraints": row["constraints"],
                 "examples": row["examples"],
-                "sample_test_cases": [],
+                "sample_test_cases": row["test_cases"] or [],
             })
 
         return questions
