@@ -667,6 +667,8 @@ def create_speech_api(app):
 
         # ── Task: receive audio from browser → Deepgram ──
 
+        audio_frame_count = [0]
+
         async def audio_receiver():
             try:
                 while True:
@@ -674,11 +676,15 @@ def create_speech_api(app):
                     if msg.get("type") == "websocket.disconnect":
                         break
                     if "bytes" in msg and msg["bytes"]:
+                        audio_frame_count[0] += 1
+                        if audio_frame_count[0] <= 5 or audio_frame_count[0] % 100 == 0:
+                            logger.info(f"🎤 Audio frame #{audio_frame_count[0]}, {len(msg['bytes'])} bytes")
                         dg_conn.send(msg["bytes"])
                     elif "text" in msg and msg["text"]:
                         try:
                             parsed = json.loads(msg["text"])
                             msg_type = parsed.get("type")
+                            logger.info(f"📨 Text msg from browser: {msg_type}")
                             if msg_type == "client_turn_complete":
                                 # Tab pressed — flush any pending transcript to LLM
                                 if pending_transcript[0]:
@@ -689,9 +695,12 @@ def create_speech_api(app):
                             elif msg_type == "KeepAlive":
                                 # Forward keepalive to Deepgram to prevent 1011 timeout
                                 try:
-                                    dg_conn.send(json.dumps({"type": "KeepAlive"}))
-                                except Exception:
-                                    pass
+                                    if hasattr(dg_conn, 'keep_alive'):
+                                        dg_conn.keep_alive()
+                                    else:
+                                        dg_conn.send(json.dumps({"type": "KeepAlive"}))
+                                except Exception as ka_err:
+                                    logger.debug(f"KeepAlive forward failed: {ka_err}")
                         except json.JSONDecodeError:
                             pass
             except (WebSocketDisconnect, RuntimeError):

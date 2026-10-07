@@ -159,20 +159,19 @@ class DatabaseManager:
         if not _is_valid_uuid(session_id):
             return False
         from backend.models.core import InterviewSession
-        meta = {
-            "session_config":        state_data.get("session_config", {}),
-            "conversation_history":  state_data.get("conversation_history", []),
-            "per_turn_feedback_log": state_data.get("per_turn_feedback_log", []),
-            "final_summary":         state_data.get("final_summary"),
-            "session_stats":         state_data.get("session_stats", {}),
-        }
         async with _get_session() as s:
-            await s.execute(
-                update(InterviewSession)
-                .where(InterviewSession.id == uuid.UUID(session_id))
-                .values(metadata_=meta, status=state_data.get("status", "active"),
-                        updated_at=datetime.utcnow())
-            )
+            row = await s.get(InterviewSession, uuid.UUID(session_id))
+            if not row:
+                return False
+            # Merge into existing metadata — preserve any keys not in state_data
+            meta = dict(row.metadata_ or {})
+            for key in ("session_config", "conversation_history", "per_turn_feedback_log",
+                        "final_summary", "session_stats"):
+                if key in state_data:
+                    meta[key] = state_data[key]
+            row.metadata_ = meta
+            row.status = state_data.get("status", row.status)
+            row.updated_at = datetime.utcnow()
             await s.commit()
         return True
 
@@ -208,13 +207,14 @@ class DatabaseManager:
                 return False
             row.status = status
             row.error_message = error_message
-            meta = row.metadata_ or {}
+            # Copy before mutating — SQLAlchemy compares identity, not value
+            meta = dict(row.metadata_ or {})
             if progress_data is not None:
                 meta["progress_data"] = progress_data
             if result_data is not None:
                 meta["result_data"] = result_data
             row.metadata_ = meta
-            if status == "completed":
+            if status in ("completed", "failed", "error"):
                 row.completed_at = datetime.utcnow()
             await s.commit()
         return True
@@ -261,7 +261,7 @@ class DatabaseManager:
         async with _get_session() as s:
             result = await s.execute(
                 delete(SpeechTask)
-                .where(SpeechTask.status.in_(["completed", "failed"]))
+                .where(SpeechTask.status.in_(["completed", "failed", "error"]))
                 .where(SpeechTask.completed_at < cutoff)
             )
             await s.commit()

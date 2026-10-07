@@ -45,9 +45,10 @@ export function useVoiceFirstInterview(
   const [isUserSpeaking, setIsUserSpeaking]         = useState(false);
 
   const aiTextRef      = useRef<HTMLSpanElement | null>(null);
-  const speechRef      = useRef<StreamingSpeechRecognition | null>(null);
-  const playerRef      = useRef<StreamingAudioPlayer | null>(null);
-  const aiTypingRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speechRef         = useRef<StreamingSpeechRecognition | null>(null);
+  const playerRef         = useRef<StreamingAudioPlayer | null>(null);
+  const aiTypingRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transcriptRef     = useRef<string>(''); // mirror of accumulatedTranscript for safe reads inside callbacks
 
   const stopVoiceSession = useCallback(() => {
     if (aiTypingRef.current) { clearInterval(aiTypingRef.current); aiTypingRef.current = null; }
@@ -58,23 +59,21 @@ export function useVoiceFirstInterview(
     setMicrophoneActive(false);
     setAudioPlaying(false);
     setTurnState('idle');
+    transcriptRef.current = '';
     setAccumulatedTranscript('');
     setIsUserSpeaking(false);
     setVoiceActivityLevel(0);
   }, []);
 
   const startVoiceSession = useCallback(async () => {
+    console.log('[VOICE-DEBUG] startVoiceSession called, sessionId:', sessionData.sessionId, 'already started:', !!speechRef.current);
     if (speechRef.current) return;
 
     const player = new StreamingAudioPlayer((playing) => {
       setAudioPlaying(playing);
-      if (playing) {
-        setTurnState('ai');
-        speechRef.current?.setMuted(true);  // mute mic while AI speaks
-      } else {
-        setTurnState('user');               // hand turn to user after AI finishes
-        speechRef.current?.setMuted(false); // unmute mic
-      }
+      setTurnState(playing ? 'ai' : 'user');
+      // Mic stays active always — AEC (echoCancellation:true) handles echo.
+      // LLM only fires on Tab press (client_turn_complete), not on transcript alone.
     });
     playerRef.current = player;
 
@@ -82,9 +81,9 @@ export function useVoiceFirstInterview(
       sessionId: sessionData.sessionId,
       onConnected: () => {
         setMicrophoneActive(true);
-        setTurnState('idle');       // stay idle until AI finishes first question
-        speechRef.current?.setMuted(true); // mute until it's user's turn
+        setTurnState('idle');
         player.unlock().catch(() => {});
+        // Mic NOT muted — stays active throughout. AEC handles echo.
       },
       onDisconnected: () => {
         setMicrophoneActive(false);
@@ -92,7 +91,11 @@ export function useVoiceFirstInterview(
       },
       onTranscript: (text, isFinal, role) => {
         if (role === 'user' && text.trim()) {
-          setAccumulatedTranscript(prev => isFinal ? text : (text || prev));
+          // Append each final segment; keep prev for interim partials.
+          if (isFinal) {
+            transcriptRef.current = (transcriptRef.current ? transcriptRef.current + ' ' : '') + text;
+            setAccumulatedTranscript(transcriptRef.current);
+          }
         }
         if (role === 'assistant' && text.trim()) {
           // Animate words into aiTextRef as audio plays
@@ -136,8 +139,14 @@ export function useVoiceFirstInterview(
     speechRef.current = speech;
 
     try {
+      console.log('[VOICE-DEBUG] calling speech.start()...');
       await speech.start();
+      console.log('[VOICE-DEBUG] speech.start() succeeded');
     } catch (e: any) {
+      console.error('[VOICE-DEBUG] speech.start() FAILED:', e);
+      // Release resources — getUserMedia may already have acquired mic tracks
+      speech.stop();
+      player.close();
       speechRef.current = null;
       playerRef.current = null;
       toast({
@@ -150,11 +159,11 @@ export function useVoiceFirstInterview(
 
   const finishAnswer = useCallback(() => {
     speechRef.current?.sendEndOfTurn();
-    // Flush accumulated transcript to chat as the user message
-    setAccumulatedTranscript(prev => {
-      if (prev.trim() && onSendMessage) onSendMessage(prev.trim());
-      return '';
-    });
+    // Read transcript from ref — safe to call outside state updater
+    const transcript = transcriptRef.current.trim();
+    if (transcript && onSendMessage) onSendMessage(transcript);
+    transcriptRef.current = '';
+    setAccumulatedTranscript('');
     setIsUserSpeaking(false);
     setVoiceActivityLevel(0);
   }, [onSendMessage]);

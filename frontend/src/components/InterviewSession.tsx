@@ -39,6 +39,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
   onSessionTimeout,
 }) => {
   const [showInstructions, setShowInstructions] = useState(true);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
   // Timer starts null and is set when the user dismisses the instructions modal,
   // so the countdown doesn't run while they're reading instructions.
@@ -80,21 +81,23 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
       if (e.code !== 'Tab') return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      e.preventDefault();
-      if (isListening && turnState !== 'ai') finishAnswer();
+      if (isListening && turnState !== 'ai') {
+        e.preventDefault(); // only block Tab when it actually triggers finishAnswer
+        finishAnswer();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [finishAnswer, isListening, turnState]);
 
-  // Auto-enable voice on mount + pre-warm voice connection during instructions
+  // Auto-enable voice on mount + pre-warm during instructions
   useEffect(() => {
+    console.log('[INTERVIEW-DEBUG] useEffect fired, defaultVoiceSet:', defaultVoiceSetRef.current, 'sessionId:', sessionId);
     if (!defaultVoiceSetRef.current) {
       setSelectedVoice('enabled');
       onVoiceSelect('enabled');
       defaultVoiceSetRef.current = true;
-      // Pre-warm: start WebSocket + mic while user reads instructions.
-      // Component mounts immediately after "Start Interview Practice" click (valid gesture).
+      console.log('[INTERVIEW-DEBUG] calling startVoiceSession from useEffect');
       startVoiceSession();
     }
   }, [onVoiceSelect, startVoiceSession]);
@@ -118,12 +121,20 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
   }, [isExpired, onEndInterview]);
 
   const handleInstructionsDismiss = () => {
-    setShowInstructions(false);
-    setSessionStartTime(Date.now());
-    // Unlock AudioContext on this gesture (browser requires explicit user gesture to play audio)
-    unlockAudio();
-    // Ensure voice is running (guard in hook prevents double-start)
-    startVoiceSession();
+    unlockAudio();       // unlocks AudioContext on this gesture — makes pre-warmed audio play
+    startVoiceSession(); // guard prevents double-start; ensures voice is running
+    setCountdown(3);
+    const tick = setInterval(() => {
+      setCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(tick);
+          setShowInstructions(false);
+          setSessionStartTime(Date.now());
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   const handleDevSend = () => {
@@ -263,11 +274,22 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
       />
 
       {/* ── Instructions Modal ── */}
-      {showInstructions && (
+      {showInstructions && countdown === null && (
         <InterviewInstructionsModal
           isOpen={showInstructions}
           onClose={handleInstructionsDismiss}
         />
+      )}
+
+      {/* ── Countdown overlay ── */}
+      {countdown !== null && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
+          <p className="text-white text-lg font-semibold mb-4 tracking-wide">Starting interview in</p>
+          <div className="w-28 h-28 rounded-full border-4 border-[#DC2626] flex items-center justify-center shadow-[0_0_40px_rgba(220,38,38,0.5)]">
+            <span className="text-6xl font-black text-white">{countdown}</span>
+          </div>
+          <p className="text-white/60 text-sm mt-5">Connecting voice session…</p>
+        </div>
       )}
 
       {/* ── End Confirm Modal ── */}
