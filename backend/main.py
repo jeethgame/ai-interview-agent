@@ -283,7 +283,10 @@ async def health_check():
         
         # Probe database connectivity
         db_status = "unknown"
+        db_driver = "unknown"
         try:
+            from backend.database import DB_DRIVER
+            db_driver = DB_DRIVER
             from backend.services import get_database_manager
             db_mgr = get_database_manager()
             if hasattr(db_mgr, 'rds') or hasattr(db_mgr, 'supabase'):
@@ -314,6 +317,7 @@ async def health_check():
             "voice_engine": nova_status,
             "services": {
                 "database": db_status,
+                "database_driver": db_driver,
                 "llm_service": llm_status,
                 "event_bus": "running",
                 "voice_engine": nova_status

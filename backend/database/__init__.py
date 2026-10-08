@@ -15,6 +15,7 @@ _db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./project08.db")
 _qb_url = os.getenv("QUESTION_BANK_DATABASE_URL", "")
 
 _is_postgres = _db_url.startswith("postgresql")
+DB_DRIVER = "postgresql" if _is_postgres else "sqlite"  # exposed for health checks
 _engine = create_async_engine(
     _db_url, echo=False, future=True,
     pool_pre_ping=True,
