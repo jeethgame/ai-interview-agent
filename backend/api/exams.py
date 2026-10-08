@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.auth_api import get_current_user, require_role
 from backend.database import get_db
 from backend.models.formal_exam import ExamAttempt, FormalExam
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/exams", tags=["Formal Exam Portal & SEB Lockdown (Member B4)"])
 
@@ -50,6 +53,38 @@ class AttemptResponse(BaseModel):
     status: str  # IN_PROGRESS, SUBMITTED, DISQUALIFIED
     score: int
     started_at: datetime
+
+async def _score_submission(exam: FormalExam, answers: dict) -> int:
+    """Run each answer against hidden test cases via Judge0. Returns 0-100."""
+    if not answers:
+        return 0
+    try:
+        from backend.api.code_execution_api import LANGUAGE_IDS, _execute_test_case
+        from backend.services.coding_question_service import get_hidden_test_cases
+
+        question_ids = json.loads(exam.question_ids or "[]")
+        if not question_ids:
+            return 0
+        total, passed = 0, 0
+        for qid in question_ids:
+            answer = answers.get(str(qid)) or answers.get(qid)
+            if not answer:
+                continue
+            source_code = answer.get("source_code", "")
+            language = answer.get("language", "python").lower()
+            if language not in LANGUAGE_IDS:
+                continue
+            test_cases = get_hidden_test_cases(str(qid))
+            for tc in test_cases:
+                total += 1
+                result = _execute_test_case(source_code, language, tc)
+                if result.get("status") == "passed":
+                    passed += 1
+        return round((passed / total) * 100) if total > 0 else 0
+    except Exception as e:
+        logger.warning("Scoring failed, defaulting to 0: %s", e)
+        return 0
+
 
 @router.post("/create", response_model=ExamResponse)
 async def create_exam(
@@ -241,9 +276,10 @@ async def submit_exam_attempt(
     if attempt.status == "DISQUALIFIED":
         raise HTTPException(status_code=403, detail="Attempt was disqualified due to integrity infractions")
 
+    exam = await db.get(FormalExam, exam_id)
     attempt.status = "SUBMITTED"
     attempt.submitted_at = datetime.utcnow()
-    attempt.score = 85  # baseline score calculated from passed test cases
+    attempt.score = await _score_submission(exam, req.answers)
     await db.flush()
 
     try:
