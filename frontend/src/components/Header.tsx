@@ -69,22 +69,16 @@ const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
     <header className="sticky top-0 z-40 w-full bg-white border-b border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-8 h-16">
 
-        {/* Brand & Logos */}
+        {/* Brand & College Crest */}
         <Link to={isAuthenticated ? (isCandidate ? '/home' : '/dashboard') : '/'} className="flex items-center gap-3 group select-none">
-          <div className="w-9 h-9 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-xs group-hover:shadow-md transition-shadow shrink-0">
-            <Mic size={18} className="text-white" />
-          </div>
-          <div className="h-7 w-[1px] bg-gray-200 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <img
-              src="/college-logo.png"
-              alt="St. Joseph's College of Engineering"
-              className="w-8 h-8 rounded-full object-contain bg-white border border-amber-200 p-0.5 shadow-xs"
-            />
-            <div>
-              <div className="text-[13px] font-extrabold text-[#111827] leading-tight tracking-tight">AI Interview Portal</div>
-              <div className="text-[9px] text-[#92400E] font-semibold tracking-wider uppercase leading-none">St. Joseph's College of Engg</div>
-            </div>
+          <img
+            src="/college-logo.png"
+            alt="St. Joseph's College of Engineering"
+            className="w-10 h-10 rounded-full object-contain bg-white border border-amber-200/80 p-0.5 shadow-sm group-hover:shadow-md transition-shadow shrink-0"
+          />
+          <div>
+            <div className="text-sm font-extrabold text-[#111827] leading-tight tracking-tight">St. Joseph's College of Engineering</div>
+            <div className="text-[10px] text-[#DC2626] font-bold tracking-wider uppercase leading-none">AI Placement & Interview Portal</div>
           </div>
         </Link>
 

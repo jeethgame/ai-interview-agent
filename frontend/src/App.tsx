@@ -56,7 +56,7 @@ function App() {
             } />
             <Route path="/interview" element={
               <ProtectedRoute>
-                <RoleRoute roles={['candidate']} fallback="/dashboard">
+                <RoleRoute roles={['candidate', 'faculty', 'admin']} fallback="/login">
                   <InterviewPage />
                 </RoleRoute>
               </ProtectedRoute>

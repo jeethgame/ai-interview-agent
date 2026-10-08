@@ -195,8 +195,8 @@ const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }
         ) : <div />}
 
         {!isDone && (
-          <button onClick={() => navigate(`/interview?role=${encodeURIComponent(interview.role)}&style=${encodeURIComponent(interview.style)}&duration=${interview.duration_minutes}`)}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-bold transition-all shadow-sm">
+          <button onClick={() => navigate(`/interview?autoStart=true&role=${encodeURIComponent(interview.role)}&style=${encodeURIComponent(interview.style)}&duration=${interview.duration_minutes}&company=${encodeURIComponent(interview.company || '')}`)}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-sm hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)]">
             <Mic size={11} /> Start <ChevronRight size={11} />
           </button>
         )}
@@ -271,13 +271,15 @@ const CandidateHomePage: React.FC = () => {
   const pendingTests = tests.filter(t => t.status === 'pending').length;
   const pendingInterviews = interviews.filter(i => i.status === 'pending').length;
   const completedInterviews = interviews.filter(i => i.status === 'completed').length;
+  const completedTests = tests.filter(t => t.status === 'completed').length;
+  const totalCompleted = completedInterviews + completedTests;
   const avgScore = interviews.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
 
   const stats = [
-    { icon: <BarChart3 size={18} />, label: 'Interviews Done', value: completedInterviews, sub: 'total completed', color: '#DC2626' },
-    { icon: <Star size={18} />, label: 'Avg Readiness', value: completedInterviews ? `${Math.round(avgScore)}%` : '—', sub: 'across evaluations', color: '#EAB308' },
-    { icon: <Target size={18} />, label: 'Tests Pending', value: pendingTests + pendingInterviews, sub: 'action items', color: '#8B5CF6' },
-    { icon: <Flame size={18} />, label: 'Streak', value: '3 days', sub: 'keep it up!', color: '#F97316' },
+    { icon: <BarChart3 size={18} />, label: 'Evaluations Completed', value: totalCompleted, sub: `${completedInterviews} voice · ${completedTests} code`, color: '#DC2626' },
+    { icon: <Star size={18} />, label: 'Readiness Index', value: completedInterviews ? `${Math.round(avgScore)}%` : '—', sub: 'across evaluations', color: '#EAB308' },
+    { icon: <Target size={18} />, label: 'Action Items', value: pendingTests + pendingInterviews, sub: 'pending tests & drives', color: '#8B5CF6' },
+    { icon: <CheckCircle2 size={18} />, label: 'Proctoring Standing', value: '100% Clean', sub: 'zero infractions', color: '#10B981' },
   ];
 
   const urgentItems = [
@@ -292,22 +294,29 @@ const CandidateHomePage: React.FC = () => {
     <div className="min-h-screen bg-[#FAFAFA]">
       <Header />
 
-      {/* Hero greeting strip */}
-      <div className="relative overflow-hidden px-4 sm:px-8 py-8"
-        style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #FEF9E7 50%, #FEF3C7 100%)' }}>
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      {/* Institutional Hero Banner */}
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-7 shadow-sm">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-[#92400E] mb-1">{greeting},</p>
-            <h1 className="text-2xl sm:text-3xl font-black text-[#111827]">{firstName} 👋</h1>
-            <p className="text-sm text-[#6B7280] mt-1">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-50 border border-red-200/60 text-[11px] font-bold text-[#DC2626] mb-2">
+              <span>St. Joseph's College of Engineering &bull; Placement Portal</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-[#111827]">{greeting}, {firstName}</h1>
+            <p className="text-sm text-[#4B5563] mt-1">
               {pendingTests + pendingInterviews > 0
-                ? `You have ${pendingTests + pendingInterviews} pending assignment${pendingTests + pendingInterviews > 1 ? 's' : ''}.`
-                : 'All caught up! Practice anytime with your AI Mock Interview.'}
+                ? `You have ${pendingTests + pendingInterviews} pending placement assessment${pendingTests + pendingInterviews > 1 ? 's' : ''} scheduled.`
+                : 'All assigned assessments completed. Review your performance or practice below.'}
             </p>
           </div>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => navigate('/interview?autoStart=true&role=Software%20Engineer')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-sm hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)]"
+            >
+              <Mic size={14} /> Practice Voice Interview
+            </button>
+          </div>
         </div>
-        <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-[#EAB308]/10 blur-xl" />
-        <div className="absolute right-16 bottom-0 w-20 h-20 rounded-full bg-[#DC2626]/5 blur-lg" />
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 space-y-6">
@@ -371,9 +380,12 @@ const CandidateHomePage: React.FC = () => {
                   {pendingInterviews} pending
                 </span>
               </div>
-              <Link to="/interview" className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-0.5 transition-colors">
-                Free Mock <ArrowRight size={12} />
-              </Link>
+              <button 
+                onClick={() => navigate('/interview?autoStart=true&role=Software%20Engineer')}
+                className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-1 transition-colors"
+              >
+                Practice Session <ArrowRight size={12} />
+              </button>
             </div>
             <div className="space-y-3">
               {loading ? (
