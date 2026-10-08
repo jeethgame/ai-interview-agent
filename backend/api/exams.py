@@ -9,7 +9,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.auth_api import get_current_user, get_current_user_optional, require_role
+from backend.api.auth_api import (
+    get_current_user,
+    get_current_user_optional,
+    require_role,
+)
 from backend.database import get_db
 from backend.models.formal_exam import ExamAttempt, FormalExam
 
@@ -348,7 +352,7 @@ async def get_exam(
 
     # Fetch assigned questions directly
     questions_list = []
-    from backend.services.coding_question_service import get_question, get_all_questions
+    from backend.services.coding_question_service import get_all_questions, get_question
     for qid in qids:
         q = get_question(str(qid))
         if q:
@@ -526,8 +530,9 @@ async def submit_exam_attempt(
     user: dict | None = Depends(get_current_user_optional),
 ):
     """Finalize candidate exam submission, compute score, and record into scorecard and assignments."""
-    import uuid
     import json
+    import uuid
+
     from sqlalchemy import text
 
     # 1. Determine candidate identity

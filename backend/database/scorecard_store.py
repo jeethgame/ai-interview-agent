@@ -29,6 +29,7 @@ async def upsert_scorecard(
     """
     try:
         import json
+
         from sqlalchemy import text as sql_text
 
         from backend.database import get_db
