@@ -51,7 +51,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         try {
           const { data } = await axios.get<User>(`${API_URL}/auth/me`);
-          const updated = { ...parsed, ...data, role: data.role || parsed.role || 'candidate' };
+          const resolvedRole: UserRole = (data.role && data.role !== 'candidate')
+            ? data.role
+            : (parsed.role && parsed.role !== 'candidate' ? parsed.role : data.role || 'candidate');
+          const updated = { ...parsed, ...data, role: resolvedRole };
           setUser(updated);
           localStorage.setItem(USER_KEY, JSON.stringify(updated));
         } catch (err: any) {

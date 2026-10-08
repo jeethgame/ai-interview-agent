@@ -764,3 +764,20 @@ export async function getMyAssignments(): Promise<MyAssignmentsResponse> {
   });
   return handleResponse(response);
 }
+
+export interface ScorecardHistoryItem {
+  session_id: string;
+  overall_score: number;
+  dimension_scores: Record<string, number>;
+  readiness_score: number | null;
+  rubric_band: string | null;
+  role: string | null;
+  date: string | null;
+}
+
+export async function getScorecardHistory(limit = 20): Promise<ScorecardHistoryItem[]> {
+  const response = await fetch(`${API_BASE_URL}/interview/scorecard/history?limit=${limit}`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
+}

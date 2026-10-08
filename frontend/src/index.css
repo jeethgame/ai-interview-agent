@@ -81,10 +81,10 @@
   }
 
   body {
-    @apply bg-[#0A0A0F] text-white font-sans antialiased overflow-x-hidden;
+    @apply bg-white text-gray-900 font-sans antialiased overflow-x-hidden;
     font-family: 'Montserrat', sans-serif;
-    background-color: #0A0A0F;
-    color: #FFFFFF;
+    background-color: #FFFFFF;
+    color: #111827;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
@@ -99,23 +99,21 @@
     font-family: 'JetBrains Mono', monospace;
   }
   
-  /* Form input & textarea styling — dark theme */
+  /* Form input & textarea styling for Theme 03 */
   input,
   textarea {
-    @apply border-white/10 text-white placeholder:text-white/25 focus-visible:ring-red-500/25 focus-visible:border-red-500/60 transition-all duration-200;
-    background-color: #0D0D14;
+    @apply bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-red-500 focus-visible:border-red-500 transition-all duration-200;
     font-size: 16px;
   }
 
   select {
-    @apply border-white/10 text-white;
-    background-color: #0D0D14;
+    @apply bg-white border-gray-200 text-gray-900;
     font-size: 16px;
   }
 
   input:focus,
   textarea:focus {
-    @apply shadow-[0_0_10px_rgba(220,38,38,0.15)] border-red-500/60;
+    @apply shadow-[0_0_10px_rgba(220,38,38,0.2)] border-red-500/80;
   }
   
   button {
@@ -129,30 +127,29 @@
   }
   
   ::-webkit-scrollbar-track {
-    @apply bg-white/5 rounded-full;
+    @apply bg-gray-100 rounded-full;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-white/15 rounded-full hover:bg-red-500/50 transition-colors;
+    @apply bg-gray-300 rounded-full hover:bg-red-500/50 transition-colors;
   }
 }
 
 @layer components {
   /* Theme 03 Signature Components */
   .theme-card {
-    background: #13131A;
+    background: #FFFFFF;
     border-radius: 12px;
     padding: 24px 28px;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-bottom: 2px solid rgba(234,179,8,0.35);
-    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    border: 1px solid #F3F4F6;
+    border-bottom: 3px solid #EAB308;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
 
   .theme-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(255,255,255,0.14);
-    box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
   }
 
   .btn-theme-primary {

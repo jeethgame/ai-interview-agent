@@ -292,8 +292,8 @@ def _stable_mock_id(email: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, email.lower().strip()))
 
 
-async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
-    """Upsert a platform_users row so institutional queries work in mock mode."""
+async def _ensure_platform_user(user_id: str, email: str, name: str, role: str, auth_provider: str = "mock"):
+    """Upsert a platform_users row so institutional queries work."""
     try:
         from sqlalchemy import text
 
@@ -301,9 +301,9 @@ async def _ensure_platform_user(user_id: str, email: str, name: str, role: str):
         async with AsyncSessionLocal() as db:
             await db.execute(text(
                 "INSERT INTO platform_users (id, email, name, role, auth_provider, data_consent_given, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :role, 'mock', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "VALUES (:id, :email, :name, :role, :provider, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
                 "ON CONFLICT (id) DO UPDATE SET name = :name, role = :role, email = :email, updated_at = CURRENT_TIMESTAMP"
-            ), {"id": user_id, "email": email, "name": name, "role": role})
+            ), {"id": user_id, "email": email, "name": name, "role": role, "provider": auth_provider})
             await db.commit()
     except Exception as e:
         logger.error(f"platform_users upsert failed: {type(e).__name__}: {e}")
@@ -402,8 +402,15 @@ def create_auth_api(app):
             tokens = resp["AuthenticationResult"]
             payload = jwt.decode(tokens["IdToken"], options={"verify_signature": False})
             user_role = _extract_role_from_payload(payload)
+            await _ensure_platform_user(
+                payload.get("sub", ""),
+                payload.get("email", body.email),
+                payload.get("name", ""),
+                user_role,
+                auth_provider="cognito",
+            )
             return AuthTokenResponse(
-                access_token=tokens["AccessToken"],
+                access_token=tokens["IdToken"],  # IdToken contains email/name/custom:role; AccessToken does not
                 refresh_token=tokens["RefreshToken"],
                 user=UserResponse(
                     id=payload.get("sub", ""),
@@ -434,11 +441,17 @@ def create_auth_api(app):
                 ClientId=COGNITO_CLIENT_ID,
             )
             tokens = resp["AuthenticationResult"]
-            payload = jwt.decode(tokens["AccessToken"], options={"verify_signature": False})
+            id_token = tokens.get("IdToken") or tokens["AccessToken"]
+            payload = jwt.decode(id_token, options={"verify_signature": False})
             return AuthTokenResponse(
-                access_token=tokens["AccessToken"],
+                access_token=id_token,
                 refresh_token=body.refresh_token,  # Cognito doesn't re-issue refresh on REFRESH flow
-                user=UserResponse(id=payload.get("sub", ""), email=payload.get("email", ""), name=""),
+                user=UserResponse(
+                    id=payload.get("sub", ""),
+                    email=payload.get("email", ""),
+                    name=payload.get("name", ""),
+                    role=_extract_role_from_payload(payload),
+                ),
             )
         except ClientError:
             raise HTTPException(status_code=401, detail="Token refresh failed")

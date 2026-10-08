@@ -2,8 +2,8 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
-import { User, FileText, History, BarChart3, Settings, ChevronRight, UploadCloud, CheckCircle } from 'lucide-react';
-import { api } from '@/services/api';
+import { User, FileText, History, BarChart3, Settings, ChevronRight, UploadCloud, CheckCircle, Trophy, Calendar, Briefcase, Loader2 } from 'lucide-react';
+import { api, getScorecardHistory, ScorecardHistoryItem } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
 const ResumeViewer = lazy(() => import('@/components/team_b/ResumeViewer').then(m => ({ default: m.default ?? m.ResumeViewer })));
@@ -25,6 +25,20 @@ const ProfilePage: React.FC = () => {
   }, [tabParam]);
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeLoaded, setResumeLoaded] = useState(false);
+
+  const [historyItems, setHistoryItems] = useState<ScorecardHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab !== 'history') return;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    getScorecardHistory(20)
+      .then(setHistoryItems)
+      .catch(() => setHistoryError('Failed to load interview history.'))
+      .finally(() => setHistoryLoading(false));
+  }, [tab]);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'account',   label: 'Account',    icon: <User size={15} /> },
@@ -164,14 +178,74 @@ const ProfilePage: React.FC = () => {
             {tab === 'history' && (
               <div className="bg-white rounded-2xl border border-gray-200 p-6">
                 <h2 className="text-base font-bold text-[#111827] mb-4">Interview History</h2>
-                <div className="text-center py-12 text-[#9CA3AF]">
-                  <History size={32} className="mx-auto mb-3 opacity-40" />
-                  <p className="text-sm font-medium">No interviews yet</p>
-                  <p className="text-xs mt-1">Start your first interview to see history here</p>
-                  <Link to="/interview" className="inline-block mt-4 text-xs font-bold text-[#DC2626] hover:underline">
-                    Start Interview →
-                  </Link>
-                </div>
+
+                {historyLoading && (
+                  <div className="flex items-center justify-center py-12 text-[#9CA3AF]">
+                    <Loader2 size={24} className="animate-spin mr-2" />
+                    <span className="text-sm">Loading history…</span>
+                  </div>
+                )}
+
+                {historyError && !historyLoading && (
+                  <div className="text-center py-12 text-[#9CA3AF]">
+                    <p className="text-sm font-medium text-red-500">{historyError}</p>
+                  </div>
+                )}
+
+                {!historyLoading && !historyError && historyItems.length === 0 && (
+                  <div className="text-center py-12 text-[#9CA3AF]">
+                    <History size={32} className="mx-auto mb-3 opacity-40" />
+                    <p className="text-sm font-medium">No interviews yet</p>
+                    <p className="text-xs mt-1">Start your first interview to see history here</p>
+                    <Link to="/interview" className="inline-block mt-4 text-xs font-bold text-[#DC2626] hover:underline">
+                      Start Interview →
+                    </Link>
+                  </div>
+                )}
+
+                {!historyLoading && !historyError && historyItems.length > 0 && (
+                  <div className="space-y-3">
+                    {historyItems.map((item) => {
+                      const score = Math.round(item.overall_score ?? 0);
+                      const scoreColor = score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-500';
+                      const scoreBg = score >= 80 ? 'bg-green-50 border-green-200' : score >= 60 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+                      const dateStr = item.date ? new Date(item.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+                      return (
+                        <div key={item.session_id} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-[#FAFAFA] hover:border-[#DC2626]/20 hover:bg-red-50/20 transition-all">
+                          <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${scoreBg}`}>
+                            <span className={`text-sm font-black ${scoreColor}`}>{score}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <Briefcase size={12} className="text-[#6B7280] shrink-0" />
+                              <span className="text-sm font-semibold text-[#111827] truncate">{item.role || 'Interview Session'}</span>
+                              {item.rubric_band && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FEF3C7] text-[#92400E] border border-amber-200 shrink-0">
+                                  {item.rubric_band}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px] text-[#9CA3AF]">
+                              <span className="flex items-center gap-1"><Calendar size={10} />{dateStr}</span>
+                              {item.readiness_score != null && (
+                                <span className="flex items-center gap-1"><Trophy size={10} />Readiness {Math.round(item.readiness_score)}%</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            {Object.entries(item.dimension_scores ?? {}).slice(0, 3).map(([dim, val]) => (
+                              <div key={dim} className="text-center hidden sm:block">
+                                <div className="text-[10px] font-bold text-[#111827]">{Math.round(Number(val))}</div>
+                                <div className="text-[9px] text-[#9CA3AF] capitalize">{dim.replace('_', ' ')}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
