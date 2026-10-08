@@ -520,7 +520,13 @@ async def create_exam_for_org(
     req: OrgExamCreateRequest,
     user: dict = require_role("admin", "faculty"),
 ):
-    """Admin creates a formal exam scoped to an org."""
+    """Admin creates a formal exam scoped to an org.
+
+    Note: formal_exams are global resources (no org_id column).
+    The org_id URL parameter serves as RBAC context only — it ensures
+    the caller is authenticated as admin/faculty of an org.
+    All admins share the same exam pool; org-scoping is via exam_assignments.
+    """
     from backend.api.exams import CreateExamRequest, create_exam
     body = CreateExamRequest(
         title=req.title,
