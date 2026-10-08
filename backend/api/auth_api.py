@@ -15,9 +15,38 @@ Falls back to mock JWT for local development (USE_MOCK_AUTH=true).
 import asyncio
 import json
 import os
+import time
 import uuid
 from datetime import datetime
 from typing import Any
+
+# Simple in-memory cache for DB role lookups (avoids hitting DB on every request)
+_role_cache: dict[str, tuple[float, str]] = {}  # user_id → (timestamp, role)
+_ROLE_CACHE_TTL = 300  # 5 minutes
+
+
+async def _resolve_role_from_db(user_id: str) -> str | None:
+    """Fallback: look up role from platform_users when token claims don't have it."""
+    now = time.time()
+    if user_id in _role_cache:
+        ts, cached_role = _role_cache[user_id]
+        if now - ts < _ROLE_CACHE_TTL:
+            return cached_role
+    try:
+        from sqlalchemy import text
+        from backend.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            r = await db.execute(
+                text("SELECT role FROM platform_users WHERE id = :uid"),
+                {"uid": user_id},
+            )
+            row = r.fetchone()
+            if row and row[0] in {"candidate", "faculty", "admin"}:
+                _role_cache[user_id] = (now, row[0])
+                return row[0]
+    except Exception:
+        pass
+    return None
 
 try:
     import boto3
@@ -183,6 +212,12 @@ async def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         role = _extract_role_from_payload(payload)
+        # If token claims don't carry role (e.g. Cognito without custom:role),
+        # fall back to the stored role in platform_users.
+        if role == ROLE_CANDIDATE and not USE_MOCK_AUTH:
+            db_role = await _resolve_role_from_db(user_id)
+            if db_role:
+                role = db_role
         return {
             "id": user_id,
             "email": payload.get("email", ""),
@@ -299,10 +334,13 @@ async def _ensure_platform_user(user_id: str, email: str, name: str, role: str, 
 
         from backend.database import AsyncSessionLocal
         async with AsyncSessionLocal() as db:
+            # ON CONFLICT: update name/email but never downgrade an existing role
             await db.execute(text(
                 "INSERT INTO platform_users (id, email, name, role, auth_provider, data_consent_given, created_at, updated_at) "
                 "VALUES (:id, :email, :name, :role, :provider, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
-                "ON CONFLICT (id) DO UPDATE SET name = :name, role = :role, email = :email, updated_at = CURRENT_TIMESTAMP"
+                "ON CONFLICT (id) DO UPDATE SET "
+                "  name = :name, email = :email, updated_at = CURRENT_TIMESTAMP, "
+                "  role = CASE WHEN platform_users.role IN ('admin','faculty') THEN platform_users.role ELSE :role END"
             ), {"id": user_id, "email": email, "name": name, "role": role, "provider": auth_provider})
             await db.commit()
     except Exception as e:

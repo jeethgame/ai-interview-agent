@@ -99,4 +99,21 @@ async def init_db() -> None:
         except Exception:
             pass  # Column already exists
 
+        # Seed correct roles for any existing platform_users whose email signals
+        # admin or faculty, but whose role is still 'candidate' (e.g. pre-provisioned
+        # accounts or Cognito users registered before custom:role was set).
+        try:
+            await conn.execute(text("""
+                UPDATE platform_users
+                SET role = CASE
+                    WHEN LOWER(email) LIKE '%admin%'   THEN 'admin'
+                    WHEN LOWER(email) LIKE '%faculty%' THEN 'faculty'
+                    ELSE role
+                END
+                WHERE role = 'candidate'
+                  AND (LOWER(email) LIKE '%admin%' OR LOWER(email) LIKE '%faculty%')
+            """))
+        except Exception:
+            pass
+
 __all__ = ["AsyncSessionLocal", "Base", "DatabaseManager", "get_db", "get_question_bank_db", "init_db"]
