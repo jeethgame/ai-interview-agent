@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import Header from '@/components/Header';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  Mic, Code2, Clock, CheckCircle2, ChevronRight, AlertCircle,
-  TrendingUp, Target, Calendar, Play, BarChart3, Flame,
-  BookOpen, Award, ArrowRight, Bell, Star
-} from 'lucide-react';
+import { CandidateLayout } from '@/components/CandidateLayout';
+import { Mic, Code2, Play, ChevronRight, Loader2 } from 'lucide-react';
 
-const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
-
-// ── Types ─────────────────────────────────────────────────────────────────
+const API =
+  (import.meta as any).env?.VITE_API_BASE_URL !== undefined && (import.meta as any).env.VITE_API_BASE_URL !== ""
+    ? (import.meta as any).env.VITE_API_BASE_URL
+    : typeof window !== "undefined" && (window.location.port === "5173" || window.location.port === "3000")
+    ? ""
+    : "http://localhost:8000";
 
 interface AssignedTest {
   id: string;
@@ -19,10 +18,8 @@ interface AssignedTest {
   company?: string;
   topic: string;
   duration_minutes: number;
-  deadline?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'expired' | 'disqualified';
-  difficulty: 'Easy' | 'Medium' | 'Hard';
-  problem_count: number;
+  difficulty: string;
   score?: number | null;
 }
 
@@ -33,181 +30,16 @@ interface AssignedInterview {
   company?: string;
   style: string;
   duration_minutes: number;
-  deadline?: string;
   status: 'pending' | 'completed';
   score?: number | null;
-  rubric_band?: string | null;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-const relativeDate = (iso?: string) => {
-  if (!iso) return null;
-  const diff = new Date(iso).getTime() - Date.now();
-  const hrs = Math.floor(diff / 3600000);
-  if (hrs < 0) return { label: 'Expired', urgent: true };
-  if (hrs < 24) return { label: `${hrs}h left`, urgent: true };
-  const days = Math.floor(hrs / 24);
-  return { label: `${days}d left`, urgent: days <= 2 };
-};
-
-const diffColor = (d: string) =>
-  d === 'Easy' ? 'text-green-600 bg-green-50' :
-  d === 'Medium' ? 'text-amber-600 bg-amber-50' :
-  'text-red-600 bg-red-50';
-
-const statusBadge = (s: string) =>
-  s === 'completed' ? 'text-green-700 bg-green-50 border-green-200' :
-  s === 'expired'   ? 'text-gray-500 bg-gray-50 border-gray-200' :
-  s === 'disqualified' ? 'text-red-700 bg-red-50 border-red-200' :
-  s === 'in_progress' ? 'text-blue-700 bg-blue-50 border-blue-200' :
-  'text-[#92400E] bg-[#FEF3C7] border-[#EAB308]/40';
-
-// ── Sub-components ────────────────────────────────────────────────────────
-
-const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: string }> =
-  ({ icon, label, value, sub, color = '#DC2626' }) => (
-  <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3">
-    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}15`, color }}>
-      {icon}
-    </div>
-    <div>
-      <p className="text-xl font-black text-[#111827] leading-tight">{value}</p>
-      <p className="text-xs text-[#6B7280] font-medium">{label}</p>
-      {sub && <p className="text-[10px] text-[#9CA3AF]">{sub}</p>}
-    </div>
-  </div>
-);
-
-const TestCard: React.FC<{ test: AssignedTest }> = ({ test }) => {
-  const navigate = useNavigate();
-  const dl = relativeDate(test.deadline);
-  const isDone = test.status === 'completed';
-  const isDisqualified = test.status === 'disqualified';
-  const isExpired = test.status === 'expired' || (dl?.urgent && dl?.label === 'Expired');
-
-  return (
-    <div className={`bg-white rounded-2xl border border-gray-200 border-b-[3px] p-5 transition-all hover:shadow-md ${
-      isDone ? 'border-b-green-400 opacity-90' : isDisqualified ? 'border-b-red-400' : isExpired ? 'border-b-gray-300' : 'border-b-[#EAB308] hover:-translate-y-0.5'
-    }`}>
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            {test.company && (
-              <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
-                {test.company}
-              </span>
-            )}
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffColor(test.difficulty)}`}>
-              {test.difficulty}
-            </span>
-          </div>
-          <h3 className="text-sm font-bold text-[#111827] leading-tight">{test.title}</h3>
-          <p className="text-xs text-[#6B7280] mt-0.5">{test.topic} · {test.duration_minutes} min</p>
-        </div>
-        <div className="text-right shrink-0">
-          {isDone && test.score !== undefined && test.score !== null ? (
-            <div>
-              <span className="text-base font-black text-gray-900">{test.score}/100</span>
-              <p className="text-[10px] text-green-600 font-bold">Passed</p>
-            </div>
-          ) : (
-            <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg border capitalize ${statusBadge(test.status)}`}>
-              {test.status.replace('_', ' ')}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
-        {dl && !isDone && !isDisqualified ? (
-          <div className={`flex items-center gap-1 text-xs font-semibold ${dl.urgent ? 'text-[#DC2626]' : 'text-[#6B7280]'}`}>
-            {dl.urgent && <AlertCircle size={12} />}
-            <Clock size={11} /> {dl.label}
-          </div>
-        ) : isDone ? (
-          <div className="flex items-center gap-1 text-xs font-semibold text-green-600">
-            <CheckCircle2 size={12} /> Completed
-          </div>
-        ) : isDisqualified ? (
-          <div className="flex items-center gap-1 text-xs font-semibold text-red-600">
-            <AlertCircle size={12} /> Disqualified
-          </div>
-        ) : <div />}
-
-        {!isDone && !isExpired && !isDisqualified && (
-          <button onClick={() => navigate(`/exam/${test.exam_id || test.id}`)}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-sm hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)]">
-            <Play size={11} /> Attempt <ChevronRight size={11} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const InterviewCard: React.FC<{ interview: AssignedInterview }> = ({ interview }) => {
-  const navigate = useNavigate();
-  const dl = relativeDate(interview.deadline);
-  const isDone = interview.status === 'completed';
-
-  return (
-    <div className={`bg-white rounded-2xl border border-gray-200 border-b-[3px] p-5 transition-all hover:shadow-md ${
-      isDone ? 'border-b-green-400 opacity-90' : 'border-b-[#EAB308] hover:-translate-y-0.5'
-    }`}>
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            {interview.company && (
-              <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
-                {interview.company}
-              </span>
-            )}
-            <span className="text-[10px] font-semibold text-[#6B7280] bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200 capitalize">
-              {interview.style}
-            </span>
-          </div>
-          <h3 className="text-sm font-bold text-[#111827]">{interview.role}</h3>
-          <p className="text-xs text-[#6B7280] mt-0.5">{interview.duration_minutes} min · AI Voice Interview</p>
-        </div>
-        {isDone && interview.score !== undefined && interview.score !== null ? (
-          <div className="shrink-0 text-right">
-            <div className="text-lg font-black text-[#111827]">{interview.score}%</div>
-            <div className="text-[10px] text-green-600 font-semibold">{interview.rubric_band || 'Score'}</div>
-          </div>
-        ) : (
-          <span className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg border capitalize ${statusBadge(interview.status)}`}>
-            {interview.status}
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between">
-        {dl && !isDone ? (
-          <div className={`flex items-center gap-1 text-xs font-semibold ${dl.urgent ? 'text-[#DC2626]' : 'text-[#6B7280]'}`}>
-            {dl.urgent && <AlertCircle size={12} />}
-            <Clock size={11} /> {dl.label}
-          </div>
-        ) : isDone ? (
-          <div className="flex items-center gap-1 text-xs font-semibold text-green-600">
-            <CheckCircle2 size={12} /> Completed
-          </div>
-        ) : <div />}
-
-        {!isDone && (
-          <button onClick={() => navigate(`/interview?autoStart=true&role=${encodeURIComponent(interview.role)}&style=${encodeURIComponent(interview.style)}&duration=${interview.duration_minutes}&company=${encodeURIComponent(interview.company || '')}`)}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-sm hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)]">
-            <Mic size={11} /> Start <ChevronRight size={11} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ── Main page ─────────────────────────────────────────────────────────────
-
 const CandidateHomePage: React.FC = () => {
+  const isSEB = typeof window !== 'undefined' && (/SEB|SafeExamBrowser/i.test(navigator.userAgent || '') || !!(window as any).SafeExamBrowser);
+  if (isSEB) {
+    return <Navigate to="/coding" replace />;
+  }
+
   const { user, getToken } = useAuth();
   const navigate = useNavigate();
 
@@ -231,10 +63,8 @@ const CandidateHomePage: React.FC = () => {
             company: 'Institutional Assessment',
             topic: e.description || 'Algorithms & Data Structures',
             duration_minutes: e.duration_minutes || 60,
-            deadline: e.deadline,
             status: e.status || 'pending',
-            difficulty: 'Medium',
-            problem_count: 3,
+            difficulty: e.difficulty || 'Medium',
             score: e.score,
           }));
 
@@ -245,10 +75,8 @@ const CandidateHomePage: React.FC = () => {
             company: i.company || 'Campus Placement',
             style: i.interview_style || 'Technical',
             duration_minutes: i.duration_minutes || 30,
-            deadline: i.scheduled_at,
             status: i.status || 'pending',
-            score: i.readiness_score != null ? Math.round(i.readiness_score) : i.overall_score ? Math.round(i.overall_score * 10) : undefined,
-            rubric_band: i.rubric_band,
+            score: i.score,
           }));
 
           setTests(mappedTests);
@@ -262,170 +90,191 @@ const CandidateHomePage: React.FC = () => {
     };
 
     fetchAssignments();
-  }, []);
+  }, [getToken]);
 
-  const firstName = user?.name?.split(' ')[0] || 'Student';
+  const firstName = user?.name?.split(' ')[0] || 'candidate';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   const pendingTests = tests.filter(t => t.status === 'pending').length;
   const pendingInterviews = interviews.filter(i => i.status === 'pending').length;
-  const completedInterviews = interviews.filter(i => i.status === 'completed').length;
-  const completedTests = tests.filter(t => t.status === 'completed').length;
-  const totalCompleted = completedInterviews + completedTests;
-  const avgScore = interviews.filter(i => i.score).reduce((s, i) => s + (i.score || 0), 0) / (completedInterviews || 1);
-
-  const stats = [
-    { icon: <BarChart3 size={18} />, label: 'Evaluations Completed', value: totalCompleted, sub: `${completedInterviews} voice · ${completedTests} code`, color: '#DC2626' },
-    { icon: <Star size={18} />, label: 'Readiness Index', value: completedInterviews ? `${Math.round(avgScore)}%` : '—', sub: 'across evaluations', color: '#EAB308' },
-    { icon: <Target size={18} />, label: 'Action Items', value: pendingTests + pendingInterviews, sub: 'pending tests & drives', color: '#8B5CF6' },
-    { icon: <CheckCircle2 size={18} />, label: 'Proctoring Standing', value: '100% Clean', sub: 'zero infractions', color: '#10B981' },
-  ];
-
-  const urgentItems = [
-    ...tests.filter(t => t.status === 'pending').map(t => ({ ...t, type: 'test' as const })),
-    ...interviews.filter(i => i.status === 'pending').map(i => ({ ...i, type: 'interview' as const })),
-  ].filter(item => {
-    const dl = relativeDate((item as any).deadline);
-    return dl && !dl.label.includes('Expired');
-  }).slice(0, 2);
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
-      <Header />
+    <CandidateLayout>
+      {/* Top Welcome Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-100">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+            {greeting},{' '}
+            <span className="text-[#dc2626] font-black">{firstName}</span>
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {pendingTests > 0
+              ? `You have ${pendingTests} pending placement assessment${pendingTests > 1 ? 's' : ''} scheduled.`
+              : 'All scheduled assessments completed. Review your scores or practice below.'}
+          </p>
+        </div>
 
-      {/* Institutional Hero Banner */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-7 shadow-sm">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-50 border border-red-200/60 text-[11px] font-bold text-[#DC2626] mb-2">
-              <span>St. Joseph's College of Engineering &bull; Placement Portal</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-[#111827]">{greeting}, {firstName}</h1>
-            <p className="text-sm text-[#4B5563] mt-1">
-              {pendingTests + pendingInterviews > 0
-                ? `You have ${pendingTests + pendingInterviews} pending placement assessment${pendingTests + pendingInterviews > 1 ? 's' : ''} scheduled.`
-                : 'All assigned assessments completed. Review your performance or practice below.'}
-            </p>
-          </div>
+        <div>
+          <button
+            onClick={() => navigate('/interview?autoStart=true&role=Software%20Engineer')}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all shadow-sm hover:shadow-[0_4px_12px_rgba(220,38,38,0.25)] cursor-pointer"
+          >
+            <Mic className="w-4 h-4" />
+            <span>Practice Voice Interview</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main 2-Column Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+        {/* Left Column: Assigned Coding Tests */}
+        <section className="space-y-4">
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => navigate('/interview?autoStart=true&role=Software%20Engineer')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-sm hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)]"
-            >
-              <Mic size={14} /> Practice Voice Interview
-            </button>
+            <Code2 className="w-4 h-4 text-[#dc2626]" />
+            <h2 className="text-sm font-bold text-gray-900">Assigned Coding Tests</h2>
+            <span className="text-[10px] font-bold text-[#dc2626] bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+              {pendingTests} pending
+            </span>
           </div>
-        </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 space-y-6">
+          <div className="space-y-3.5">
+            {loading ? (
+              <div className="p-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-[#dc2626]" />
+                <span className="text-xs">Loading assessments…</span>
+              </div>
+            ) : tests.length === 0 ? (
+              <div className="p-10 text-center text-gray-400 bg-white rounded-2xl border border-gray-100">
+                <p className="text-xs font-semibold text-gray-600">No coding tests assigned yet</p>
+                <p className="text-[11px] text-gray-400 mt-1">Scheduled tests will appear here.</p>
+              </div>
+            ) : (
+              tests.map(test => {
+                const isDone = test.status === 'completed';
+                return (
+                  <div
+                    key={test.id}
+                    className="bg-white rounded-2xl border border-gray-100/90 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Top Badges */}
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-[#dc2626] bg-red-50 border border-red-100/60 px-2.5 py-0.5 rounded-full">
+                          {test.company || 'Institutional Assessment'}
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full">
+                          {test.difficulty || 'Medium'}
+                        </span>
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50/60 border border-amber-200/60 px-2 py-0.5 rounded-full capitalize">
+                          {test.status}
+                        </span>
+                      </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {stats.map(s => <StatCard key={s.label} {...s} />)}
-        </div>
+                      {/* Title & Description */}
+                      <h3 className="text-base font-bold text-gray-900 leading-tight">
+                        {test.title}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {test.topic} • {test.duration_minutes} min
+                      </p>
+                    </div>
 
-        {/* Urgent due soon — alert strip */}
-        {urgentItems.length > 0 && (
-          <div className="bg-[#FEF3C7] border border-[#EAB308]/50 rounded-2xl p-4 flex items-center gap-3">
-            <Bell size={16} className="text-[#92400E] shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-[#92400E]">Upcoming Assignment</p>
-              <p className="text-xs text-[#92400E]/80 truncate">
-                {urgentItems.map(i => (i as any).title || (i as any).role).join(' · ')}
-              </p>
-            </div>
-            <ChevronRight size={14} className="text-[#92400E] shrink-0" />
+                    {/* Action Button */}
+                    <div className="mt-4 flex justify-end">
+                      {isDone ? (
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg">
+                          Completed
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/coding?exam_id=${test.exam_id || test.id}`)}
+                          className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all shadow-xs hover:shadow-sm cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Attempt</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
-        )}
+        </section>
 
-        {/* Main 2-column grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Right Column: Assigned AI Interviews */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2.5">
+            <Mic className="w-4 h-4 text-[#dc2626]" />
+            <h2 className="text-sm font-bold text-gray-900">Assigned AI Interviews</h2>
+            <span className="text-[10px] font-bold text-[#dc2626] bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+              {pendingInterviews} pending
+            </span>
+          </div>
 
-          {/* Assigned Coding Tests */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Code2 size={16} className="text-[#DC2626]" />
-                <h2 className="text-sm font-black text-[#111827]">Assigned Coding Tests</h2>
-                <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {pendingTests} pending
-                </span>
+          <div className="space-y-3.5">
+            {loading ? (
+              <div className="p-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-[#dc2626]" />
+                <span className="text-xs">Loading interviews…</span>
               </div>
-            </div>
-            <div className="space-y-3">
-              {loading ? (
-                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-100">
-                  Loading tests…
+            ) : interviews.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-10 flex flex-col items-center justify-center text-center shadow-xs min-h-[220px]">
+                <div className="w-14 h-14 rounded-full bg-gray-100/80 flex items-center justify-center text-gray-400 mb-3.5">
+                  <Mic className="w-6 h-6 text-gray-400" />
                 </div>
-              ) : tests.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-200">
-                  <p className="text-sm font-medium">No coding tests assigned yet</p>
-                  <p className="text-xs text-gray-400 mt-1">Tests assigned by your faculty or administrator will appear here.</p>
-                </div>
-              ) : (
-                tests.map(test => <TestCard key={test.id} test={test} />)
-              )}
-            </div>
-          </section>
+                <h3 className="text-sm font-bold text-gray-800">
+                  No placement interviews assigned yet
+                </h3>
+                <p className="text-xs text-gray-400 mt-1 max-w-xs leading-relaxed">
+                  Mock drives scheduled for your cohort will appear here.
+                </p>
+              </div>
+            ) : (
+              interviews.map(interview => (
+                <div
+                  key={interview.id}
+                  className="bg-white rounded-2xl border border-gray-100/90 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className="text-[10px] font-bold text-[#dc2626] bg-red-50 border border-red-100/60 px-2.5 py-0.5 rounded-full">
+                        {interview.company || 'Campus Placement'}
+                      </span>
+                      <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2.5 py-0.5 rounded-full capitalize">
+                        {interview.style}
+                      </span>
+                    </div>
 
-          {/* Assigned AI Interviews */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Mic size={16} className="text-[#DC2626]" />
-                <h2 className="text-sm font-black text-[#111827]">Assigned AI Interviews</h2>
-                <span className="text-[10px] font-bold text-[#DC2626] bg-red-50 px-1.5 py-0.5 rounded-full">
-                  {pendingInterviews} pending
-                </span>
-              </div>
-              <button 
-                onClick={() => navigate('/interview?autoStart=true&role=Software%20Engineer')}
-                className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-1 transition-colors"
-              >
-                Practice Session <ArrowRight size={12} />
-              </button>
-            </div>
-            <div className="space-y-3">
-              {loading ? (
-                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-100">
-                  Loading interviews…
-                </div>
-              ) : interviews.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 bg-white rounded-2xl border border-gray-200">
-                  <p className="text-sm font-medium">No placement interviews assigned yet</p>
-                  <p className="text-xs text-gray-400 mt-1">Mock drives scheduled for your cohort will appear here.</p>
-                </div>
-              ) : (
-                interviews.map(interview => <InterviewCard key={interview.id} interview={interview} />)
-              )}
-            </div>
-          </section>
-        </div>
+                    <h3 className="text-base font-bold text-gray-900 leading-tight">
+                      {interview.role}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {interview.duration_minutes} min • AI Voice Interview
+                    </p>
+                  </div>
 
-        {/* Bottom action row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pb-6">
-          {[
-            { icon: <BookOpen size={16} />, label: 'View my scores', sub: 'Track progress', to: '/profile?tab=scorecard', color: '#8B5CF6' },
-            { icon: <Award size={16} />, label: 'Resume & profile', sub: 'Keep it updated', to: '/profile?tab=resume', color: '#10B981' },
-            { icon: <BarChart3 size={16} />, label: 'My results', sub: 'Past submissions', to: '/profile?tab=history', color: '#F97316' },
-          ].map(({ icon, label, sub, to, color }) => (
-            <Link key={label} to={to}
-              className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all group">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}15`, color }}>
-                {icon}
-              </div>
-              <div>
-                <p className="text-xs font-bold text-[#111827] group-hover:text-[#DC2626] transition-colors">{label}</p>
-                <p className="text-[10px] text-[#9CA3AF]">{sub}</p>
-              </div>
-              <ChevronRight size={13} className="ml-auto text-gray-300 group-hover:text-[#DC2626] transition-colors" />
-            </Link>
-          ))}
-        </div>
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/interview?autoStart=true&role=${encodeURIComponent(interview.role)}&style=${encodeURIComponent(interview.style)}&duration=${interview.duration_minutes}`
+                        )
+                      }
+                      className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all shadow-xs hover:shadow-sm cursor-pointer"
+                    >
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>Start</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
-    </div>
+    </CandidateLayout>
   );
 };
 

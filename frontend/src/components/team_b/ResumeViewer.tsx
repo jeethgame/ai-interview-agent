@@ -7,6 +7,8 @@ interface ResumeViewerProps {
   onClaimsLoaded?: (claims: string[]) => void;
 }
 
+const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
+
 export const ResumeViewer: React.FC<ResumeViewerProps> = ({ userId, onClaimsLoaded }) => {
   const [resumeText, setResumeText] = useState(
     "Senior Full Stack Engineer\nSkills: Python, FastAPI, PostgreSQL, Redis, React, Docker, Kubernetes\nProjects:\n- AI Mock Interview Platform: Scaled async workers handling 500 concurrent sessions.\n- Reduced query latency by 45% using Redis caching.\n- Designed resilient circuit breaker fallback for LLM API integration."
@@ -21,7 +23,7 @@ export const ResumeViewer: React.FC<ResumeViewerProps> = ({ userId, onClaimsLoad
   const handleParse = async () => {
     setParsing(true);
     try {
-      const res = await fetch("http://localhost:8000/api/resumes/parse", {
+      const res = await fetch(`${API}/api/resumes/parse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, resume_text: resumeText }),
@@ -41,13 +43,16 @@ export const ResumeViewer: React.FC<ResumeViewerProps> = ({ userId, onClaimsLoad
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl text-xs space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="font-bold text-slate-200">Resume Claim Intelligence</span>
+    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs text-xs space-y-4">
+      <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+        <div>
+          <h3 className="font-bold text-gray-900 text-sm">Resume Claim Intelligence</h3>
+          <p className="text-gray-500 text-[11px] mt-0.5">Extract verified technical claims for AI probing during interview sessions</p>
+        </div>
         <button
           onClick={handleParse}
           disabled={parsing}
-          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded font-medium transition"
+          className="px-4 py-2 bg-[#DC2626] hover:bg-[#B91C1C] disabled:opacity-50 text-white rounded-xl font-bold transition shadow-xs"
         >
           {parsing ? "Parsing Claims..." : "Ingest Resume"}
         </button>
@@ -55,24 +60,24 @@ export const ResumeViewer: React.FC<ResumeViewerProps> = ({ userId, onClaimsLoad
 
       {!parsedData ? (
         <div>
-          <label className="text-slate-400 block mb-1">Paste Resume Text / Project Experience:</label>
+          <label className="text-gray-600 font-semibold block mb-1.5">Paste Resume Text / Project Experience:</label>
           <textarea
             value={resumeText}
             onChange={(e) => setResumeText(e.target.value)}
             rows={5}
-            className="w-full p-2.5 bg-slate-950 text-slate-200 border border-slate-800 rounded focus:outline-none focus:border-indigo-500 font-mono text-xs"
+            className="w-full p-3 bg-gray-50 text-gray-800 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#DC2626] font-mono text-xs"
           />
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {/* Skill Pills */}
           <div>
-            <span className="font-semibold text-slate-400 block mb-1.5">Extracted Skills:</span>
+            <span className="font-bold text-gray-700 block mb-2">Extracted Skills:</span>
             <div className="flex flex-wrap gap-1.5">
               {parsedData.skills.map((skill, idx) => (
                 <span
                   key={idx}
-                  className="px-2 py-0.5 bg-indigo-950 border border-indigo-700 text-indigo-300 font-medium rounded-full"
+                  className="px-2.5 py-1 bg-red-50 border border-red-200 text-[#DC2626] font-semibold rounded-lg text-xs"
                 >
                   {skill}
                 </span>
@@ -82,16 +87,16 @@ export const ResumeViewer: React.FC<ResumeViewerProps> = ({ userId, onClaimsLoad
 
           {/* Verifiable Claims */}
           <div>
-            <span className="font-semibold text-slate-400 block mb-1.5">
+            <span className="font-bold text-gray-700 block mb-2">
               Verifiable Technical Claims (Anchored to Probing Agent):
             </span>
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {parsedData.claims.map((claim, idx) => (
                 <li
                   key={idx}
-                  className="p-2 bg-slate-950 border border-slate-800 rounded text-slate-300 flex items-start gap-2"
+                  className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 flex items-start gap-2.5 leading-relaxed"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                   <span>{claim}</span>
                 </li>
               ))}

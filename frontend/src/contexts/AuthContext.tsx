@@ -41,8 +41,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const loadUser = async () => {
-      const storedUser = localStorage.getItem(USER_KEY);
-      const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+      let storedUser = localStorage.getItem(USER_KEY);
+      let storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+
+      // Support direct token handover when launching Safe Exam Browser
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('auth_token') || urlParams.get('token');
+        const urlUserRaw = urlParams.get('auth_user');
+
+        if (urlToken) {
+          storedToken = urlToken;
+          localStorage.setItem(ACCESS_TOKEN_KEY, urlToken);
+
+          if (urlUserRaw) {
+            try {
+              storedUser = decodeURIComponent(urlUserRaw);
+              localStorage.setItem(USER_KEY, storedUser);
+            } catch {
+              // fallback
+            }
+          }
+          if (!storedUser) {
+            const fallbackUser: User = {
+              id: 'candidate',
+              email: 'candidate@assessment.com',
+              name: 'Examination Candidate',
+              role: 'candidate',
+            };
+            storedUser = JSON.stringify(fallbackUser);
+            localStorage.setItem(USER_KEY, storedUser);
+          }
+        }
+      }
+
       if (storedUser && storedToken) {
         const parsed: User = JSON.parse(storedUser);
         // Default role to candidate for older tokens without role field
@@ -58,7 +90,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(updated);
           localStorage.setItem(USER_KEY, JSON.stringify(updated));
         } catch (err: any) {
-          if (err?.response && (err.response.status === 401 || err.response.status === 403)) {
+          const isSEB = typeof window !== 'undefined' && (/SEB|SafeExamBrowser/i.test(navigator.userAgent || '') || !!(window as any).SafeExamBrowser);
+          if (!isSEB && err?.response && (err.response.status === 401 || err.response.status === 403)) {
             localStorage.removeItem(ACCESS_TOKEN_KEY);
             localStorage.removeItem(REFRESH_TOKEN_KEY);
             localStorage.removeItem(USER_KEY);

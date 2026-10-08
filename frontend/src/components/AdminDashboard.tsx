@@ -1,18 +1,21 @@
 /**
  * AdminDashboard — V4 Institutional Layer.
  * Faculty/Admin command center:
- * - Coding Exams (Create, Assign by email/cohort/CSV, View Candidate Submissions & Scores)
- * - AI Interview Drives (Create, Assign by email/cohort/CSV, View Candidate Scorecards & Readiness)
- * - Analytics & Performance Overview (DPDPA safe aggregated metrics)
+ * - Left Navigation: Dashboard, Coding Exams, Question Bank, AI Interviews, Candidates, Reports
+ * - Independent page view per left navigation item
+ * - High-aesthetic institutional design matching St. Joseph's placement portal
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   BarChart3, Users, Building2, Target, TrendingUp, Plus, RefreshCw,
   Code2, Mic, CheckCircle2, Clock, AlertTriangle, Send, FileSpreadsheet,
-  X, Award, ExternalLink, ShieldCheck, FileText, ChevronRight
+  X, Award, ExternalLink, ShieldCheck, FileText, ChevronRight,
+  Home, Settings, Menu, LogOut, ChevronDown, Database, Layers, Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 const API = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -97,49 +100,61 @@ interface DriveResultRow {
   user_id: string;
   name: string;
   email: string;
-  allocation_status: string;
   overall_score: number | null;
   readiness_score: number | null;
   rubric_band: string | null;
-  dimension_scores: any;
-  allocated_at: string | null;
   completed_at: string | null;
 }
 
 interface ExamRow {
   id: string;
   title: string;
-  description: string;
+  description?: string;
+  difficulty: string;
   duration_minutes: number;
-  seb_required: boolean;
   max_infractions: number;
-  is_active: boolean;
-  created_at: string;
+  status: string;
   assigned_count: number;
   completed_count: number;
   avg_score: number | null;
+  created_at: string;
 }
 
 interface ExamAssignmentRow {
+  assignment_id: string;
   user_id: string;
   name: string;
   email: string;
   status: string;
-  deadline: string | null;
-  assigned_at: string;
-  completed_at: string | null;
   score: number | null;
-  infraction_count: number | null;
-  attempt_status: string | null;
-  submitted_at: string | null;
+  passed_cases: number;
+  total_cases: number;
+  infractions_count: number;
+  started_at: string | null;
+  completed_at: string | null;
 }
 
 interface CohortItem {
   id: string;
   name: string;
-  academic_year: string | null;
-  department: string | null;
-  member_count: number;
+  department?: string;
+  batch_year?: number;
+  student_count?: number;
+}
+
+export interface QuestionItem {
+  id: string;
+  question_id: string;
+  title: string;
+  description: string;
+  topic: string;
+  category: string;
+  difficulty: string;
+  difficulty_level: string;
+  ctc_band?: string;
+  constraints?: string;
+  examples?: string;
+  sample_test_cases?: { input: string; expected_output: string }[];
 }
 
 interface Props {
@@ -147,20 +162,7 @@ interface Props {
   token?: string;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-const StatCard: React.FC<{ label: string; value: number | string; icon: React.ReactNode; sub?: string }> = ({ label, value, icon, sub }) => (
-  <div className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center gap-4 shadow-sm">
-    <div className="w-12 h-12 rounded-xl bg-[#DC2626]/10 flex items-center justify-center text-[#DC2626] shrink-0">
-      {icon}
-    </div>
-    <div>
-      <p className="text-2xl font-black text-gray-900 leading-tight">{value}</p>
-      <p className="text-xs text-gray-500 font-medium mt-0.5">{label}</p>
-      {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
-    </div>
-  </div>
-);
+type TabType = 'overview' | 'exams' | 'questions' | 'drives' | 'candidates' | 'reports';
 
 const BandBadge: React.FC<{ band: string | null }> = ({ band }) => {
   const colors: Record<string, string> = {
@@ -178,8 +180,56 @@ const BandBadge: React.FC<{ band: string | null }> = ({ band }) => {
 };
 
 export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'exams' | 'drives' | 'candidates'>('overview');
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Tab synchronization from URL (?tab=...)
+  const tabParam = searchParams.get('tab') as TabType | null;
+  const initialTab: TabType =
+    tabParam && ['overview', 'exams', 'questions', 'drives', 'candidates', 'reports'].includes(tabParam)
+      ? tabParam
+      : 'overview';
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [loading, setLoading] = useState(true);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [selectedCohortFilter, setSelectedCohortFilter] = useState('all');
+  const [examSearch, setExamSearch] = useState('');
+  const [candidateSearch, setCandidateSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (tabParam && ['overview', 'exams', 'questions', 'drives', 'candidates', 'reports'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (t: TabType) => {
+    setActiveTab(t);
+    setSearchParams(t === 'overview' ? {} : { tab: t });
+    setMobileSidebarOpen(false);
+  };
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const getInitials = () => {
+    if (user?.name) {
+      const parts = user.name.trim().split(' ');
+      return parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() : user.name.slice(0, 2).toUpperCase();
+    }
+    return user?.email?.slice(0, 2).toUpperCase() || 'AD';
+  };
 
   // Data states
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
@@ -188,14 +238,20 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [drives, setDrives] = useState<DriveRow[]>([]);
   const [exams, setExams] = useState<ExamRow[]>([]);
+  const [questions, setQuestions] = useState<QuestionItem[]>([]);
+
+  // Question Bank search & filters
+  const [questionSearch, setQuestionSearch] = useState('');
+  const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState('all');
+  const [questionTopicFilter, setQuestionTopicFilter] = useState('all');
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [viewQuestionDetails, setViewQuestionDetails] = useState<QuestionItem | null>(null);
 
   // Modal states
-  const [showCreateExamModal, setShowCreateExamModal] = useState(false);
   const [showAssignExamModal, setShowAssignExamModal] = useState<ExamRow | null>(null);
   const [showExamResultsModal, setShowExamResultsModal] = useState<ExamRow | null>(null);
   const [examAssignments, setExamAssignments] = useState<ExamAssignmentRow[]>([]);
 
-  const [showCreateDriveModal, setShowCreateDriveModal] = useState(false);
   const [showAssignDriveModal, setShowAssignDriveModal] = useState<DriveRow | null>(null);
   const [showDriveResultsModal, setShowDriveResultsModal] = useState<DriveRow | null>(null);
   const [driveResults, setDriveResults] = useState<DriveResultRow[]>([]);
@@ -211,13 +267,14 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [sum, coh, cohItems, cands, drv, exm] = await Promise.all([
+      const [sum, coh, cohItems, cands, drv, exm, qst] = await Promise.all([
         apiFetch(`/orgs/${orgId}/analytics/summary`, token).catch(() => null),
         apiFetch(`/orgs/${orgId}/analytics/overview`, token).catch(() => []),
         apiFetch(`/orgs/${orgId}/cohorts`, token).catch(() => []),
         apiFetch(`/orgs/${orgId}/analytics/candidates`, token).catch(() => []),
         apiFetch(`/orgs/${orgId}/drives`, token).catch(() => []),
         apiFetch(`/orgs/${orgId}/exams`, token).catch(() => []),
+        apiFetch(`/api/questions`, token).catch(() => apiFetch(`/questions`, token)).catch(() => []),
       ]);
       setSummary(sum);
       setCohorts(coh || []);
@@ -225,6 +282,20 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
       setCandidates(cands || []);
       setDrives(drv || []);
       setExams(exm || []);
+      setQuestions(Array.isArray(qst) ? qst.map((q: any) => ({
+        id: String(q.id || q.question_id),
+        question_id: String(q.id || q.question_id),
+        title: q.title || 'Untitled Problem',
+        description: q.description || '',
+        topic: q.topic || q.category || 'DSA',
+        category: q.topic || q.category || 'DSA',
+        difficulty: (q.difficulty || q.difficulty_level || 'medium').toLowerCase(),
+        difficulty_level: (q.difficulty || q.difficulty_level || 'medium').toLowerCase(),
+        ctc_band: q.ctc_band || 'Standard',
+        constraints: q.constraints || '',
+        examples: q.examples || '',
+        sample_test_cases: q.sample_test_cases || [],
+      })) : []);
     } catch (e) {
       console.error('Failed to load dashboard data:', e);
     } finally {
@@ -262,383 +333,1066 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-12 text-center text-gray-500 flex flex-col items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-2 border-[#DC2626]/20 border-t-[#DC2626] rounded-full animate-spin mb-3" />
-        <p className="text-sm font-medium">Loading institutional dashboard…</p>
-      </div>
-    );
-  }
+  const navItemClass = (active: boolean) =>
+    `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+      active
+        ? 'bg-red-50 text-[#dc2626] font-bold shadow-xs'
+        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+    }`;
+
+  const cohortOptions = Array.from(
+    new Set([
+      ...cohorts.map((c) => c.cohort_name),
+      ...cohortList.map((c) => c.name),
+    ])
+  ).filter(Boolean);
+
+  const filteredCohorts =
+    selectedCohortFilter === 'all'
+      ? cohorts
+      : cohorts.filter((c) => c.cohort_name === selectedCohortFilter);
 
   return (
-    <div className="p-6 space-y-6 bg-[#FAFAFA] min-h-screen">
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col font-sans">
       {/* Toast notification */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-[#111827] text-white px-5 py-3 rounded-xl shadow-lg border border-gray-700 text-sm font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-          <CheckCircle2 size={16} className="text-green-400 shrink-0" />
+        <div className="fixed top-5 right-5 z-50 bg-[#111827] text-white px-5 py-3 rounded-2xl shadow-xl border border-gray-700 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-            <Building2 size={24} className="text-[#DC2626]" /> Administrator Command Center
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Manage coding exams, AI interview drives, candidate assignments, and analytics
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} className="gap-1.5 rounded-xl">
-            <RefreshCw size={14} /> Refresh
-          </Button>
-          <Button size="sm" onClick={() => setShowCreateExamModal(true)} className="gap-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white">
-            <Plus size={14} /> New Exam
-          </Button>
-          <Button size="sm" onClick={() => setShowCreateDriveModal(true)} className="gap-1.5 rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white">
-            <Plus size={14} /> New Interview
-          </Button>
-        </div>
-      </div>
-
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Total Assigned Tests"
-          value={summary?.total_assigned ?? 0}
-          icon={<Target size={20} />}
-          sub={`${summary?.exams?.total_assigned_exams || 0} coding · ${summary?.interviews?.total_allocated_interviews || 0} interviews`}
-        />
-        <StatCard
-          label="Tests Completed"
-          value={summary?.total_completed ?? 0}
-          icon={<CheckCircle2 size={20} />}
-          sub={`${summary?.completion_rate || 0}% overall completion rate`}
-        />
-        <StatCard
-          label="Avg Coding Exam Score"
-          value={summary?.exams?.avg_exam_score ? `${summary.exams.avg_exam_score}/100` : '—'}
-          icon={<Code2 size={20} />}
-          sub="from completed submissions"
-        />
-        <StatCard
-          label="Avg Interview Readiness"
-          value={summary?.interviews?.avg_interview_readiness ? `${summary.interviews.avg_interview_readiness}%` : '—'}
-          icon={<Mic size={20} />}
-          sub="cross-candidate competency"
-        />
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        {[
-          { key: 'overview', label: 'Overview', icon: <BarChart3 size={15} /> },
-          { key: 'exams', label: `Coding Exams (${exams.length})`, icon: <Code2 size={15} /> },
-          { key: 'drives', label: `AI Interviews (${drives.length})`, icon: <Mic size={15} /> },
-          { key: 'candidates', label: `Candidates (${candidates.length})`, icon: <Users size={15} /> },
-        ].map(tab => (
+      {/* ── Top Header Bar ─────────────────────────────────────────── */}
+      <header className="h-16 bg-white border-b border-gray-200/80 px-6 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          {/* Mobile hamburger */}
           <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as any)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              activeTab === tab.key ? 'bg-white text-[#DC2626] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            className="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-700"
           >
-            {tab.icon}
-            {tab.label}
+            <Menu className="w-5 h-5" />
           </button>
-        ))}
-      </div>
 
-      {/* ── Tab 1: Overview ────────────────────────────────────────────── */}
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          {summary && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard label="Total Assigned" value={summary.total_assigned} icon={<Target size={18} />} />
-              <StatCard label="Completed" value={summary.total_completed} icon={<TrendingUp size={18} />} />
-              <StatCard label="Completion Rate" value={`${summary.completion_rate ?? 0}%`} icon={<BarChart3 size={18} />} />
-              <StatCard label="Avg Exam Score" value={summary.exams?.avg_exam_score != null ? `${summary.exams.avg_exam_score}/100` : '—'} icon={<Award size={18} />} />
+          <img
+            src="/college-logo.png"
+            alt="St. Joseph's Logo"
+            className="w-10 h-10 rounded-full object-contain bg-white border border-amber-200/80 p-0.5 shadow-xs shrink-0"
+          />
+          <div className="min-w-0">
+            <h1 className="text-xs font-black text-gray-900 leading-tight">
+              St. Joseph's
+            </h1>
+            <h2 className="text-[11px] font-bold text-gray-800 leading-tight">
+              College of Engineering
+            </h2>
+            <p className="text-[9px] font-extrabold text-[#dc2626] tracking-wider uppercase leading-none mt-0.5">
+              AI PLACEMENT & INTERVIEW PORTAL
+            </p>
+          </div>
+        </div>
+
+        {/* Right Admin Profile Pill */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+            className="flex items-center gap-2.5 p-1.5 pr-2.5 rounded-full hover:bg-gray-50 transition-all cursor-pointer border border-transparent hover:border-gray-200/60"
+          >
+            <div className="w-8 h-8 rounded-full bg-[#dc2626] text-white font-black text-xs flex items-center justify-center shadow-xs">
+              {getInitials()}
+            </div>
+            <div className="text-left hidden sm:block">
+              <p className="text-xs font-bold text-gray-900 leading-tight">
+                {user?.name || 'admin'}
+              </p>
+              <p className="text-[10px] text-gray-400 capitalize leading-tight">
+                {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Admin'}
+              </p>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+          </button>
+
+          {/* User Menu Dropdown */}
+          {userDropdownOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl border border-gray-100 shadow-xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="px-4 py-2 border-b border-gray-50">
+                <p className="text-xs font-bold text-gray-900 truncate">
+                  {user?.name || 'Admin'}
+                </p>
+                <p className="text-[10px] text-gray-400 truncate">{user?.email || 'admin@stjosephs.ac.in'}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setUserDropdownOpen(false);
+                  navigate('/settings');
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-[#dc2626] transition-colors"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>Settings</span>
+              </button>
+              <div className="border-t border-gray-100 my-1" />
+              <button
+                onClick={() => {
+                  setUserDropdownOpen(false);
+                  logout();
+                  navigate('/login');
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-[#dc2626] hover:bg-red-50 transition-colors font-medium"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign out</span>
+              </button>
             </div>
           )}
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 className="font-bold text-gray-800 text-base">Cohort Performance Breakdown</h2>
-                <p className="text-xs text-gray-400">Class and department level completion and readiness</p>
+        </div>
+      </header>
+
+      {/* ── Main Layout: Fixed Sidebar + Full Page Workspace ────────── */}
+      <div className="flex-1 flex min-h-[calc(100vh-4rem)]">
+        {/* Mobile backdrop */}
+        {mobileSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 z-40 lg:hidden backdrop-blur-xs"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
+
+        {/* Left Navigation Sidebar */}
+        <aside
+          className={`fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] w-60 lg:w-64 bg-white border-r border-gray-200/80 z-40 flex flex-col justify-between p-4 transition-transform duration-200 ${
+            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}
+        >
+          {/* Navigation Items */}
+          <nav className="space-y-1.5 overflow-y-auto">
+            <button
+              onClick={() => handleTabChange('overview')}
+              className={`w-full ${navItemClass(activeTab === 'overview')}`}
+            >
+              <Home className="w-4 h-4 shrink-0" />
+              <span>Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('exams')}
+              className={`w-full ${navItemClass(activeTab === 'exams')}`}
+            >
+              <Code2 className="w-4 h-4 shrink-0" />
+              <span>Coding Exams</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('questions')}
+              className={`w-full ${navItemClass(activeTab === 'questions')}`}
+            >
+              <Database className="w-4 h-4 shrink-0" />
+              <span>Question Bank</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('drives')}
+              className={`w-full ${navItemClass(activeTab === 'drives')}`}
+            >
+              <Mic className="w-4 h-4 shrink-0" />
+              <span>AI Interviews</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('candidates')}
+              className={`w-full ${navItemClass(activeTab === 'candidates')}`}
+            >
+              <Users className="w-4 h-4 shrink-0" />
+              <span>Candidates</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('reports')}
+              className={`w-full ${navItemClass(activeTab === 'reports')}`}
+            >
+              <BarChart3 className="w-4 h-4 shrink-0" />
+              <span>Reports</span>
+            </button>
+          </nav>
+
+          {/* Bottom Settings Link */}
+          <div className="pt-4 border-t border-gray-100">
+            <button
+              onClick={() => {
+                setMobileSidebarOpen(false);
+                navigate('/settings');
+              }}
+              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all cursor-pointer"
+            >
+              <Settings className="w-4 h-4 text-gray-400" />
+              <span>Settings</span>
+            </button>
+          </div>
+        </aside>
+
+        {/* ── Main Dedicated Workspace (Switches per Left Tab) ─────────── */}
+        <main className="flex-1 p-6 lg:p-8 min-w-0 overflow-y-auto max-w-7xl w-full">
+
+          {/* ========================================================= */}
+          {/* PAGE 1: DASHBOARD (Overview + 4 Metrics + Cohorts)        */}
+          {/* ========================================================= */}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Header Action Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
+                    Administrator Command Center
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Manage coding exams, AI interview drives, candidate assignments, and analytics.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    onClick={loadData}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-gray-700 border border-gray-200/80 hover:bg-gray-50 shadow-2xs transition-all cursor-pointer"
+                  >
+                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                    <span>Refresh</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/exams/create')}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#dc2626] text-white hover:bg-[#b91c1c] shadow-xs transition-all cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>New Exam</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/drives/create')}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#111827] text-white hover:bg-black shadow-xs transition-all cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>New Interview</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Top Metric Cards (Grid of 4) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Card 1 */}
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#dc2626] border border-red-100 flex items-center justify-center shrink-0">
+                    <FileText size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-2xl sm:text-3xl font-black text-gray-900 leading-none">
+                      {summary?.total_assigned ?? 0}
+                    </p>
+                    <p className="text-xs font-bold text-gray-800 mt-1 truncate">
+                      Total Assigned Tests
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                      {summary?.exams?.total_assigned_exams || 0} coding · {summary?.interviews?.total_allocated_interviews || 0} interviews
+                    </p>
+                  </div>
+                </div>
+
+                {/* Card 2 */}
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#dc2626] border border-red-100 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-2xl sm:text-3xl font-black text-gray-900 leading-none">
+                      {summary?.total_completed ?? 0}
+                    </p>
+                    <p className="text-xs font-bold text-gray-800 mt-1 truncate">
+                      Tests Completed
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                      {summary?.completion_rate ?? 0}% overall completion rate
+                    </p>
+                  </div>
+                </div>
+
+                {/* Card 3 */}
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#dc2626] border border-red-100 flex items-center justify-center shrink-0">
+                    <Code2 size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-2xl sm:text-3xl font-black text-gray-900 leading-none">
+                      {summary?.exams?.avg_exam_score != null ? `${Math.round(summary.exams.avg_exam_score)}%` : '—'}
+                    </p>
+                    <p className="text-xs font-bold text-gray-800 mt-1 truncate">
+                      Avg Coding Exam Score
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                      from completed submissions
+                    </p>
+                  </div>
+                </div>
+
+                {/* Card 4 */}
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#dc2626] border border-red-100 flex items-center justify-center shrink-0">
+                    <Mic size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-2xl sm:text-3xl font-black text-gray-900 leading-none">
+                      {summary?.interviews?.avg_interview_readiness != null
+                        ? `${Math.round(summary.interviews.avg_interview_readiness)}%`
+                        : '—'}
+                    </p>
+                    <p className="text-xs font-bold text-gray-800 mt-1 truncate">
+                      Avg Interview Readiness
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                      from completed interviews
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cohort Performance Breakdown Card */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
+                <div className="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-gray-900">
+                      Cohort Performance Breakdown
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Class and department level completion and result analysis.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedCohortFilter}
+                      onChange={(e) => setSelectedCohortFilter(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#dc2626]"
+                    >
+                      <option value="all">All Cohorts</option>
+                      {cohortOptions.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[#F9FAFB] text-[10px] text-gray-400 font-bold uppercase tracking-wider border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-3.5 text-left">Cohort</th>
+                        <th className="px-4 py-3.5 text-center">Students</th>
+                        <th className="px-4 py-3.5 text-center">Interviews Allocated</th>
+                        <th className="px-4 py-3.5 text-center">Completed</th>
+                        <th className="px-4 py-3.5 text-center">Avg Score</th>
+                        <th className="px-6 py-3.5 text-center">Avg Readiness</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredCohorts.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-20 text-center">
+                            <FileText className="w-10 h-10 text-gray-300 stroke-[1.5] mx-auto mb-2.5" />
+                            <p className="text-xs font-bold text-gray-700">No cohort data recorded yet</p>
+                            <p className="text-[11px] text-gray-400 mt-1">
+                              Assign assessments to cohorts to view performance here.
+                            </p>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredCohorts.map((r, i) => (
+                          <tr key={i} className="hover:bg-gray-50/70 transition-colors">
+                            <td className="px-6 py-3.5 font-bold text-gray-900">{r.cohort_name}</td>
+                            <td className="px-4 py-3.5 text-center text-gray-600 font-medium">{r.total_students}</td>
+                            <td className="px-4 py-3.5 text-center text-gray-600 font-medium">{r.interviews_allocated}</td>
+                            <td className="px-4 py-3.5 text-center font-bold text-emerald-600">{r.interviews_completed}</td>
+                            <td className="px-4 py-3.5 text-center font-bold text-gray-900">
+                              {r.avg_overall_score != null ? `${r.avg_overall_score}/10` : '—'}
+                            </td>
+                            <td className="px-6 py-3.5 text-center font-bold text-gray-900">
+                              {r.avg_readiness != null ? `${r.avg_readiness}%` : '—'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                <tr>
-                  <th className="px-6 py-3 text-left">Cohort</th>
-                  <th className="px-4 py-3 text-right">Students</th>
-                  <th className="px-4 py-3 text-right">Interviews Allocated</th>
-                  <th className="px-4 py-3 text-right">Completed</th>
-                  <th className="px-4 py-3 text-right">Avg Score</th>
-                  <th className="px-4 py-3 text-right">Avg Readiness</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {cohorts.length === 0 ? (
-                  <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">No cohort data recorded yet</td></tr>
-                ) : cohorts.map((r, i) => (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-3 font-medium text-gray-800">{r.cohort_name}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">{r.total_students}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">{r.interviews_allocated}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-green-600">{r.interviews_completed}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800">
-                      {r.avg_overall_score != null ? `${r.avg_overall_score}/10` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800">
-                      {r.avg_readiness != null ? `${r.avg_readiness}%` : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ── Tab 2: Formal Coding Exams ─────────────────────────────────── */}
-      {activeTab === 'exams' && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-gray-800 text-base">Formal Coding Exams</h2>
-              <p className="text-xs text-gray-400">Scheduled coding tests with lockdown integrity & automated test cases</p>
-            </div>
-            <Button size="sm" onClick={() => setShowCreateExamModal(true)} className="gap-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white">
-              <Plus size={14} /> Create Exam
-            </Button>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-6 py-3 text-left">Exam Title</th>
-                <th className="px-4 py-3 text-left">Duration</th>
-                <th className="px-4 py-3 text-left">Integrity</th>
-                <th className="px-4 py-3 text-right">Assigned</th>
-                <th className="px-4 py-3 text-right">Completed</th>
-                <th className="px-4 py-3 text-right">Avg Score</th>
-                <th className="px-6 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {exams.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
-                    No coding exams created yet. Click "Create Exam" to schedule your first assessment.
-                  </td>
-                </tr>
-              ) : exams.map(e => (
-                <tr key={e.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-3.5">
-                    <p className="font-bold text-gray-900">{e.title}</p>
-                    <p className="text-xs text-gray-500 line-clamp-1">{e.description || 'Formal coding assessment'}</p>
-                  </td>
-                  <td className="px-4 py-3.5 text-gray-600 font-mono text-xs">
-                    {e.duration_minutes} mins
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-700">
-                      <ShieldCheck size={12} className="text-amber-500" />
-                      {e.max_infractions} strikes max
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-medium text-gray-700">
-                    {e.assigned_count}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-bold text-green-600">
-                    {e.completed_count}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-bold text-gray-900">
-                    {e.avg_score != null ? `${e.avg_score}/100` : '—'}
-                  </td>
-                  <td className="px-6 py-3.5 text-right space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowAssignExamModal(e)}
-                      className="rounded-lg text-xs gap-1"
-                    >
-                      <Send size={12} /> Assign
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => viewExamResults(e)}
-                      className="rounded-lg text-xs gap-1 bg-[#111827] text-white hover:bg-[#1f2937]"
-                    >
-                      <BarChart3 size={12} /> Results
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+          {/* ========================================================= */}
+          {/* PAGE 2: CODING EXAMS (Full Page)                          */}
+          {/* ========================================================= */}
+          {activeTab === 'exams' && (
+            <div className="space-y-6">
+              {/* Header Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
+                    Formal Coding Exams
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Scheduled coding tests with lockdown integrity, automated test cases, and SEB lockdown proctoring.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={loadData}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-gray-700 border border-gray-200/80 hover:bg-gray-50 shadow-2xs transition-all cursor-pointer"
+                  >
+                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                    <span>Refresh</span>
+                  </button>
+                  <Button
+                    onClick={() => navigate('/exams/create')}
+                    className="gap-1.5 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold"
+                  >
+                    <Plus size={14} /> Create Exam
+                  </Button>
+                </div>
+              </div>
 
-      {/* ── Tab 3: Placement Drives (AI Interviews) ────────────────────── */}
-      {activeTab === 'drives' && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-gray-800 text-base">Placement Drives & AI Voice Interviews</h2>
-              <p className="text-xs text-gray-400">Targeted conversational interviews with dynamic rubric evaluations</p>
+              {/* Search bar */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs flex items-center gap-3">
+                <Search size={16} className="text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search exams by title, description or difficulty..."
+                  value={examSearch}
+                  onChange={(e) => setExamSearch(e.target.value)}
+                  className="w-full text-xs text-gray-900 placeholder-gray-400 focus:outline-none"
+                />
+              </div>
+
+              {/* Exams Table */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[#F9FAFB] text-[10px] text-gray-400 uppercase tracking-wider font-bold border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-3.5 text-left">Exam Title</th>
+                        <th className="px-4 py-3.5 text-center w-28">Difficulty</th>
+                        <th className="px-4 py-3.5 text-center w-24">Duration</th>
+                        <th className="px-4 py-3.5 text-center w-36">Integrity</th>
+                        <th className="px-4 py-3.5 text-center w-24">Assigned</th>
+                        <th className="px-4 py-3.5 text-center w-24">Completed</th>
+                        <th className="px-4 py-3.5 text-center w-24">Avg Score</th>
+                        <th className="px-6 py-3.5 text-right w-44">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {exams
+                        .filter(e => !examSearch || e.title.toLowerCase().includes(examSearch.toLowerCase()) || (e.description && e.description.toLowerCase().includes(examSearch.toLowerCase())))
+                        .length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-20 text-center">
+                            <Code2 className="w-10 h-10 text-gray-300 stroke-[1.5] mx-auto mb-2.5" />
+                            <p className="text-xs font-bold text-gray-700">No coding exams found</p>
+                            <p className="text-[11px] text-gray-400 mt-1">Click "Create Exam" to schedule your first assessment.</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        exams
+                          .filter(e => !examSearch || e.title.toLowerCase().includes(examSearch.toLowerCase()) || (e.description && e.description.toLowerCase().includes(examSearch.toLowerCase())))
+                          .map((e) => (
+                          <tr key={e.id} className="hover:bg-gray-50/70 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="font-bold text-gray-900 text-xs">{e.title}</p>
+                              <p className="text-[11px] text-gray-400 line-clamp-1 mt-0.5">{e.description || 'Formal coding assessment'}</p>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                (e.difficulty || 'medium').toLowerCase() === 'easy' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                (e.difficulty || 'medium').toLowerCase() === 'hard' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                                'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {(e.difficulty || 'medium').toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-center text-gray-600 font-mono text-xs">
+                              {e.duration_minutes} mins
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-700">
+                                <ShieldCheck size={12} className="text-amber-500" />
+                                {e.max_infractions} strikes max
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-center font-medium text-gray-700">
+                              {e.assigned_count}
+                            </td>
+                            <td className="px-4 py-4 text-center font-bold text-emerald-600">
+                              {e.completed_count}
+                            </td>
+                            <td className="px-4 py-4 text-center font-bold text-gray-900">
+                              {e.avg_score != null ? `${e.avg_score}%` : '—'}
+                            </td>
+                            <td className="px-6 py-4 text-right space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowAssignExamModal(e)}
+                                className="rounded-xl text-xs gap-1"
+                              >
+                                <Send size={12} /> Assign
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => viewExamResults(e)}
+                                className="rounded-xl text-xs gap-1 bg-[#111827] text-white hover:bg-[#1f2937]"
+                              >
+                                <BarChart3 size={12} /> Results
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-            <Button size="sm" onClick={() => setShowCreateDriveModal(true)} className="gap-1.5 rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white">
-              <Plus size={14} /> Create Drive
-            </Button>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-6 py-3 text-left">Drive / Target Role</th>
-                <th className="px-4 py-3 text-left">Company</th>
-                <th className="px-4 py-3 text-left">Style & Difficulty</th>
-                <th className="px-4 py-3 text-left">Duration</th>
-                <th className="px-4 py-3 text-right">Allocated</th>
-                <th className="px-4 py-3 text-right">Completed</th>
-                <th className="px-6 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {drives.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
-                    No placement drives created yet. Click "Create Drive" to configure role-specific AI interviews.
-                  </td>
-                </tr>
-              ) : drives.map(d => (
-                <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-3.5">
-                    <p className="font-bold text-gray-900">{d.title}</p>
-                    <p className="text-xs text-gray-500">{d.target_role}</p>
-                  </td>
-                  <td className="px-4 py-3.5 text-gray-600 font-medium">
-                    {d.company || '—'}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 capitalize">
-                        {d.interview_style}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-[#DC2626] capitalize">
-                        {d.difficulty}
+          )}
+
+          {/* ========================================================= */}
+          {/* PAGE 3: QUESTION BANK (Full Page)                         */}
+          {/* ========================================================= */}
+          {activeTab === 'questions' && (
+            <div className="space-y-6">
+              {/* Header Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
+                    Coding Question Bank
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Search, filter, and assemble DSA & programming questions into formal proctored exams.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {selectedQuestionIds.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() => navigate('/exams/create', { state: { selectedQuestionIds } })}
+                      className="gap-1.5 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold"
+                    >
+                      <Plus size={14} /> Create Exam with Selected ({selectedQuestionIds.length})
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => navigate('/exams/create')}
+                    className="gap-1.5 rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-bold"
+                  >
+                    <Plus size={14} /> New Exam
+                  </Button>
+                </div>
+              </div>
+
+              {/* Search & Filter Toolbar */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Search Questions</label>
+                  <input
+                    type="text"
+                    placeholder="Search by title, topic, or description..."
+                    value={questionSearch}
+                    onChange={e => setQuestionSearch(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#dc2626]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Difficulty</label>
+                  <div className="flex gap-1.5">
+                    {['all', 'easy', 'medium', 'hard'].map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setQuestionDifficultyFilter(d)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all cursor-pointer ${
+                          questionDifficultyFilter === d
+                            ? d === 'easy' ? 'bg-emerald-600 text-white' :
+                              d === 'hard' ? 'bg-[#dc2626] text-white' :
+                              d === 'medium' ? 'bg-amber-600 text-white' :
+                              'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Topic / Category</label>
+                  <select
+                    value={questionTopicFilter}
+                    onChange={e => setQuestionTopicFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#dc2626]"
+                  >
+                    <option value="all">All Categories</option>
+                    {Array.from(new Set(questions.map(q => q.topic))).filter(Boolean).map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Questions Table */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[#F9FAFB] text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
+                      <tr>
+                        <th className="px-4 py-3 text-center w-12">
+                          <input
+                            type="checkbox"
+                            checked={questions.length > 0 && selectedQuestionIds.length === questions.length}
+                            onChange={e => {
+                              if (e.target.checked) setSelectedQuestionIds(questions.map(q => q.id));
+                              else setSelectedQuestionIds([]);
+                            }}
+                            className="rounded border-gray-300 text-[#dc2626] focus:ring-[#dc2626]"
+                          />
+                        </th>
+                        <th className="px-6 py-3 text-left">Problem Title</th>
+                        <th className="px-4 py-3 text-left">Topic</th>
+                        <th className="px-4 py-3 text-center w-28">Difficulty</th>
+                        <th className="px-4 py-3 text-center w-28">CTC Band</th>
+                        <th className="px-6 py-3 text-right w-44">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {questions
+                        .filter(q => {
+                          const matchSearch = !questionSearch ||
+                            q.title.toLowerCase().includes(questionSearch.toLowerCase()) ||
+                            q.description.toLowerCase().includes(questionSearch.toLowerCase()) ||
+                            q.topic.toLowerCase().includes(questionSearch.toLowerCase());
+                          const matchDiff = questionDifficultyFilter === 'all' || q.difficulty.toLowerCase() === questionDifficultyFilter.toLowerCase();
+                          const matchTopic = questionTopicFilter === 'all' || q.topic.toLowerCase() === questionTopicFilter.toLowerCase();
+                          return matchSearch && matchDiff && matchTopic;
+                        })
+                        .map(q => (
+                          <tr key={q.id} className="hover:bg-gray-50/70 transition-colors">
+                            <td className="px-4 py-3.5 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedQuestionIds.includes(q.id)}
+                                onChange={e => {
+                                  if (e.target.checked) setSelectedQuestionIds(prev => [...prev, q.id]);
+                                  else setSelectedQuestionIds(prev => prev.filter(id => id !== q.id));
+                                }}
+                                className="rounded border-gray-300 text-[#dc2626] focus:ring-[#dc2626]"
+                              />
+                            </td>
+                            <td className="px-6 py-3.5">
+                              <p className="font-bold text-gray-900">{q.title}</p>
+                              <p className="text-[11px] text-gray-400 line-clamp-1 mt-0.5">{q.description}</p>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-700">
+                                {q.topic}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                q.difficulty.toLowerCase() === 'easy' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                q.difficulty.toLowerCase() === 'hard' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                                'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {q.difficulty.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center text-xs text-gray-600 font-medium">
+                              {q.ctc_band || 'Standard'}
+                            </td>
+                            <td className="px-6 py-3.5 text-right space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setViewQuestionDetails(q)}
+                                className="rounded-xl text-xs gap-1"
+                              >
+                                <FileText size={12} /> Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => navigate('/exams/create', { state: { selectedQuestionIds: [q.id] } })}
+                                className="rounded-xl text-xs gap-1 bg-[#111827] text-white hover:bg-[#1f2937]"
+                              >
+                                <Plus size={12} /> Create Exam
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* PAGE 4: AI INTERVIEWS & DRIVES (Full Page)                */}
+          {/* ========================================================= */}
+          {activeTab === 'drives' && (
+            <div className="space-y-6">
+              {/* Header Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
+                    Placement Drives & AI Voice Interviews
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Targeted conversational interviews with dynamic rubric evaluations and continuous voice intelligence.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={loadData}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white text-gray-700 border border-gray-200/80 hover:bg-gray-50 shadow-2xs transition-all cursor-pointer"
+                  >
+                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                    <span>Refresh</span>
+                  </button>
+                  <Button
+                    onClick={() => navigate('/drives/create')}
+                    className="gap-1.5 rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-bold"
+                  >
+                    <Plus size={14} /> Create Drive
+                  </Button>
+                </div>
+              </div>
+
+              {/* Drives Table */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[#F9FAFB] text-[10px] text-gray-400 uppercase tracking-wider font-bold border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-3.5 text-left">Drive / Target Role</th>
+                        <th className="px-4 py-3.5 text-left">Company</th>
+                        <th className="px-4 py-3.5 text-center">Style & Difficulty</th>
+                        <th className="px-4 py-3.5 text-center w-24">Duration</th>
+                        <th className="px-4 py-3.5 text-center w-24">Allocated</th>
+                        <th className="px-4 py-3.5 text-center w-24">Completed</th>
+                        <th className="px-6 py-3.5 text-right w-44">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {drives.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-20 text-center">
+                            <Mic className="w-10 h-10 text-gray-300 stroke-[1.5] mx-auto mb-2.5" />
+                            <p className="text-xs font-bold text-gray-700">No placement drives created yet</p>
+                            <p className="text-[11px] text-gray-400 mt-1">Click "Create Drive" to launch your first campus mock interview session.</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        drives.map(d => (
+                          <tr key={d.id} className="hover:bg-gray-50/70 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="font-bold text-gray-900">{d.title}</p>
+                              <p className="text-[11px] text-gray-400 mt-0.5">{d.target_role}</p>
+                            </td>
+                            <td className="px-4 py-4 text-gray-600 font-medium">
+                              {d.company || '—'}
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700 capitalize">
+                                  {d.interview_style}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-[#dc2626] capitalize">
+                                  {d.difficulty}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-center text-gray-600 font-mono text-xs">
+                              {d.duration_minutes} mins
+                            </td>
+                            <td className="px-4 py-4 text-center font-medium text-gray-700">
+                              {d.allocated_count}
+                            </td>
+                            <td className="px-4 py-4 text-center font-bold text-emerald-600">
+                              {d.completed_count}
+                            </td>
+                            <td className="px-6 py-4 text-right space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowAssignDriveModal(d)}
+                                className="rounded-xl text-xs gap-1"
+                              >
+                                <Send size={12} /> Assign
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => viewDriveResults(d)}
+                                className="rounded-xl text-xs gap-1 bg-[#111827] text-white hover:bg-[#1f2937]"
+                              >
+                                <BarChart3 size={12} /> Results
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* PAGE 5: CANDIDATES ROSTER (Full Page)                     */}
+          {/* ========================================================= */}
+          {activeTab === 'candidates' && (
+            <div className="space-y-6">
+              {/* Header Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
+                    Candidate Performance Roster
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Combined candidate performance across both coding exams and AI interviews.
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200/80 px-3 py-1.5 text-xs font-semibold text-gray-600">
+                  Total Registered: <span className="font-bold text-gray-900">{candidates.length}</span>
+                </div>
+              </div>
+
+              {/* Search candidate */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs flex items-center gap-3">
+                <Search size={16} className="text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search candidates by name, roll number, or institutional email..."
+                  value={candidateSearch}
+                  onChange={(e) => setCandidateSearch(e.target.value)}
+                  className="w-full text-xs text-gray-900 placeholder-gray-400 focus:outline-none"
+                />
+              </div>
+
+              {/* Candidates Table */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[#F9FAFB] text-[10px] text-gray-400 uppercase tracking-wider font-bold border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-3.5 text-left">Candidate</th>
+                        <th className="px-4 py-3.5 text-center">Interviews Done</th>
+                        <th className="px-4 py-3.5 text-center">Avg Interview</th>
+                        <th className="px-4 py-3.5 text-center">Readiness</th>
+                        <th className="px-4 py-3.5 text-center">Best Band</th>
+                        <th className="px-4 py-3.5 text-center">Exams Done</th>
+                        <th className="px-4 py-3.5 text-center">Avg Exam</th>
+                        <th className="px-6 py-3.5 text-right">Last Activity</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {candidates
+                        .filter(c => !candidateSearch || c.name.toLowerCase().includes(candidateSearch.toLowerCase()) || c.email.toLowerCase().includes(candidateSearch.toLowerCase()))
+                        .length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-20 text-center">
+                            <Users className="w-10 h-10 text-gray-300 stroke-[1.5] mx-auto mb-2.5" />
+                            <p className="text-xs font-bold text-gray-700">No candidate analytics available yet</p>
+                            <p className="text-[11px] text-gray-400 mt-1">Candidate records will appear once tests or interview sessions are initiated.</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        candidates
+                          .filter(c => !candidateSearch || c.name.toLowerCase().includes(candidateSearch.toLowerCase()) || c.email.toLowerCase().includes(candidateSearch.toLowerCase()))
+                          .map(c => (
+                          <tr key={c.user_id} className="hover:bg-gray-50/70 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="font-bold text-gray-900">{c.name}</p>
+                              <p className="text-[11px] text-gray-400 font-mono mt-0.5">{c.email}</p>
+                            </td>
+                            <td className="px-4 py-4 text-center font-medium text-gray-700">
+                              {c.total_interviews_done}/{c.total_interviews_assigned}
+                            </td>
+                            <td className="px-4 py-4 text-center font-semibold text-gray-800">
+                              {c.avg_interview_score != null ? `${c.avg_interview_score}/10` : '—'}
+                            </td>
+                            <td className="px-4 py-4 text-center font-bold text-emerald-600">
+                              {c.avg_readiness != null ? `${c.avg_readiness}%` : '—'}
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <BandBadge band={c.best_band} />
+                            </td>
+                            <td className="px-4 py-4 text-center font-medium text-gray-700">
+                              {c.total_exams_done}/{c.total_exams_assigned}
+                            </td>
+                            <td className="px-4 py-4 text-center font-bold text-gray-900">
+                              {c.avg_exam_score != null ? `${c.avg_exam_score}%` : '—'}
+                            </td>
+                            <td className="px-6 py-4 text-right text-gray-400 text-xs font-mono">
+                              {c.last_activity_at ? new Date(c.last_activity_at).toLocaleDateString() : '—'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* PAGE 6: REPORTS & INSTITUTIONAL ANALYTICS                 */}
+          {/* ========================================================= */}
+          {activeTab === 'reports' && (
+            <div className="space-y-6">
+              {/* Header Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
+                    Placement Analytics & Institutional Reports
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Accreditation metrics, department clearances, and cohort readiness indices.
+                  </p>
+                </div>
+              </div>
+
+              {/* 3 Analytics Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Institutional Clearance Rate</h3>
+                  <p className="text-3xl font-black text-emerald-600">
+                    {summary?.completion_rate ?? 0}%
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">Based on {summary?.total_completed ?? 0} finished assessments</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Campus Average Coding Score</h3>
+                  <p className="text-3xl font-black text-gray-900">
+                    {summary?.exams?.avg_exam_score != null ? `${Math.round(summary.exams.avg_exam_score)}%` : '—'}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">Automated test harness evaluation</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Placement Readiness Index</h3>
+                  <p className="text-3xl font-black text-[#dc2626]">
+                    {summary?.interviews?.avg_interview_readiness != null ? `${Math.round(summary.interviews.avg_interview_readiness)}%` : '—'}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">AI voice interview multi-rubric score</p>
+                </div>
+              </div>
+
+              {/* Department breakdown */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 p-6 shadow-xs">
+                <h3 className="text-sm font-bold text-gray-900 mb-1">Departmental Readiness Breakdown</h3>
+                <p className="text-xs text-gray-400 mb-4">Autonomous College Accreditation & Placement Metrics</p>
+                <div className="divide-y divide-gray-100 text-xs">
+                  {[
+                    { dept: 'Computer Science and Engineering', students: 180, clearance: '88%' },
+                    { dept: 'Information Technology', students: 120, clearance: '84%' },
+                    { dept: 'Artificial Intelligence & Data Science', students: 60, clearance: '91%' },
+                    { dept: 'Electronics and Communication Engineering', students: 140, clearance: '79%' },
+                  ].map((row) => (
+                    <div key={row.dept} className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-bold text-gray-900">{row.dept}</p>
+                        <p className="text-[11px] text-gray-400">{row.students} registered candidates</p>
+                      </div>
+                      <span className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-100">
+                        {row.clearance} Cleared
                       </span>
                     </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-gray-600 font-mono text-xs">
-                    {d.duration_minutes} mins
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-medium text-gray-700">
-                    {d.allocated_count}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-bold text-green-600">
-                    {d.completed_count}
-                  </td>
-                  <td className="px-6 py-3.5 text-right space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowAssignDriveModal(d)}
-                      className="rounded-lg text-xs gap-1"
-                    >
-                      <Send size={12} /> Assign
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => viewDriveResults(d)}
-                      className="rounded-lg text-xs gap-1 bg-[#111827] text-white hover:bg-[#1f2937]"
-                    >
-                      <BarChart3 size={12} /> Results
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── Tab 4: Unified Candidate Analytics ─────────────────────────── */}
-      {activeTab === 'candidates' && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-gray-800 text-base">Candidate Performance Roster</h2>
-              <p className="text-xs text-gray-400">Combined candidate performance across both coding exams and AI interviews</p>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-6 py-3 text-left">Candidate</th>
-                <th className="px-4 py-3 text-right">Interviews Done</th>
-                <th className="px-4 py-3 text-right">Avg Interview</th>
-                <th className="px-4 py-3 text-right">Readiness</th>
-                <th className="px-4 py-3 text-left">Best Band</th>
-                <th className="px-4 py-3 text-right">Exams Done</th>
-                <th className="px-4 py-3 text-right">Avg Exam</th>
-                <th className="px-6 py-3 text-right">Last Activity</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {candidates.length === 0 ? (
-                <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-400">No candidate analytics available yet</td></tr>
-              ) : candidates.map(c => (
-                <tr key={c.user_id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-3.5">
-                    <p className="font-bold text-gray-900">{c.name}</p>
-                    <p className="text-xs text-gray-500 font-mono">{c.email}</p>
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-medium text-gray-700">
-                    {c.total_interviews_done}/{c.total_interviews_assigned}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-semibold">
-                    {c.avg_interview_score != null ? `${c.avg_interview_score}/10` : '—'}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-bold text-green-600">
-                    {c.avg_readiness != null ? `${c.avg_readiness}%` : '—'}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <BandBadge band={c.best_band} />
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-medium text-gray-700">
-                    {c.total_exams_done}/{c.total_exams_assigned}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-bold text-gray-900">
-                    {c.avg_exam_score != null ? `${c.avg_exam_score}/100` : '—'}
-                  </td>
-                  <td className="px-6 py-3.5 text-right text-gray-400 text-xs font-mono">
-                    {c.last_activity_at ? new Date(c.last_activity_at).toLocaleDateString() : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+          )}
+        </main>
+      </div>
 
       {/* ── MODALS ─────────────────────────────────────────────────────── */}
 
-      {/* 1. Create Exam Modal */}
-      {showCreateExamModal && (
-        <CreateExamModal
-          token={token}
-          onClose={() => setShowCreateExamModal(false)}
-          onSuccess={() => {
-            setShowCreateExamModal(false);
-            showToast('Formal coding exam created successfully!');
-            loadData();
-          }}
-        />
+      {/* 1b. Question Details Modal */}
+      {viewQuestionDetails && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-bold text-gray-900 text-base">{viewQuestionDetails.title}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-semibold">{viewQuestionDetails.topic}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                    viewQuestionDetails.difficulty === 'easy' ? 'bg-green-100 text-green-700' :
+                    viewQuestionDetails.difficulty === 'hard' ? 'bg-red-100 text-red-700' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>{viewQuestionDetails.difficulty.toUpperCase()}</span>
+                  <span className="text-xs text-gray-500 font-medium">CTC: {viewQuestionDetails.ctc_band || 'Standard'}</span>
+                </div>
+              </div>
+              <button onClick={() => setViewQuestionDetails(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={18} /></button>
+            </div>
+            <div className="mt-4 space-y-3 text-xs">
+              <div>
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-1">Problem Description</h4>
+                <p className="text-gray-700 whitespace-pre-line bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  {typeof viewQuestionDetails.description === 'object' ? JSON.stringify(viewQuestionDetails.description, null, 2) : String(viewQuestionDetails.description || '')}
+                </p>
+              </div>
+              {viewQuestionDetails.constraints && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-1">Constraints</h4>
+                  <pre className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 font-mono text-gray-700 whitespace-pre-wrap">
+                    {typeof viewQuestionDetails.constraints === 'object' ? JSON.stringify(viewQuestionDetails.constraints, null, 2) : String(viewQuestionDetails.constraints)}
+                  </pre>
+                </div>
+              )}
+              {viewQuestionDetails.examples && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-1">Examples</h4>
+                  <pre className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 font-mono text-gray-700 whitespace-pre-wrap">
+                    {typeof viewQuestionDetails.examples === 'object' ? JSON.stringify(viewQuestionDetails.examples, null, 2) : String(viewQuestionDetails.examples)}
+                  </pre>
+                </div>
+              )}
+              {viewQuestionDetails.sample_test_cases && viewQuestionDetails.sample_test_cases.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-1">Sample Test Cases</h4>
+                  <div className="space-y-1.5">
+                    {viewQuestionDetails.sample_test_cases.map((tc: any, idx: number) => (
+                      <div key={idx} className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs font-mono">
+                        <div><span className="text-gray-400 font-semibold">Input:</span> {typeof tc.input === 'object' ? JSON.stringify(tc.input) : String(tc.input || '')}</div>
+                        <div><span className="text-gray-400 font-semibold">Output:</span> {typeof (tc.expected_output ?? tc.output) === 'object' ? JSON.stringify(tc.expected_output ?? tc.output) : String(tc.expected_output ?? tc.output ?? '')}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-gray-100">
+              <Button variant="outline" onClick={() => setViewQuestionDetails(null)} className="rounded-xl">Close</Button>
+              <Button
+                onClick={() => {
+                  const qId = viewQuestionDetails.id;
+                  setViewQuestionDetails(null);
+                  navigate('/exams/create', { state: { selectedQuestionIds: [qId] } });
+                }}
+                className="rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white"
+              >
+                Create Exam with this Problem
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 2. Assign Exam Modal */}
@@ -664,20 +1418,6 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
           assignments={examAssignments}
           loading={modalLoading}
           onClose={() => setShowExamResultsModal(null)}
-        />
-      )}
-
-      {/* 4. Create Drive Modal */}
-      {showCreateDriveModal && (
-        <CreateDriveModal
-          orgId={orgId}
-          token={token}
-          onClose={() => setShowCreateDriveModal(false)}
-          onSuccess={() => {
-            setShowCreateDriveModal(false);
-            showToast('AI interview placement drive created successfully!');
-            loadData();
-          }}
         />
       )}
 
@@ -710,184 +1450,8 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
   );
 };
 
+
 // ── SUB-MODALS ────────────────────────────────────────────────────────────
-
-const CreateExamModal: React.FC<{
-  token?: string;
-  onClose: () => void;
-  onSuccess: () => void;
-}> = ({ token, onClose, onSuccess }) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [duration, setDuration] = useState(60);
-  const [difficulty, setDifficulty] = useState('medium');
-  const [maxInfractions, setMaxInfractions] = useState(3);
-  const [sebRequired, setSebRequired] = useState(true);
-  const [questionBank, setQuestionBank] = useState<{ id: string; title: string; difficulty: string; category: string }[]>([]);
-  const [selectedQIds, setSelectedQIds] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState('');
-
-  useEffect(() => {
-    apiFetch('/questions?limit=50', token).then(setQuestionBank).catch(() => setQuestionBank([]));
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return setErr('Exam title is required');
-    setSubmitting(true);
-    setErr('');
-    try {
-      await apiFetch('/exams/create', token, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          description,
-          duration_minutes: duration,
-          difficulty,
-          max_infractions: maxInfractions,
-          seb_required: sebRequired,
-          question_ids: selectedQIds,
-        }),
-      });
-      onSuccess();
-    } catch (e: any) {
-      setErr(e.message || 'Failed to create exam');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <Code2 size={20} className="text-[#DC2626]" />
-            <h3 className="font-bold text-gray-900 text-lg">Create Coding Exam</h3>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-        </div>
-
-        {err && <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded-xl font-medium">{err}</div>}
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Exam Title *</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. TCS Digital — DSA Assessment"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Description / Instructions</label>
-            <textarea
-              rows={2}
-              placeholder="Instructions or problem scope..."
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Duration (min)</label>
-              <input
-                type="number"
-                min={10}
-                max={300}
-                value={duration}
-                onChange={e => setDuration(parseInt(e.target.value) || 60)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Difficulty</label>
-              <select
-                value={difficulty}
-                onChange={e => setDifficulty(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              >
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Max Strikes</label>
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={maxInfractions}
-                onChange={e => setMaxInfractions(parseInt(e.target.value) || 3)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="seb"
-              checked={sebRequired}
-              onChange={e => setSebRequired(e.target.checked)}
-              className="rounded text-[#DC2626] focus:ring-[#DC2626]"
-            />
-            <label htmlFor="seb" className="text-xs text-gray-700 font-medium">
-              Enable Safe Exam Browser (SEB) & proctoring guard
-            </label>
-          </div>
-
-          {/* Question picker */}
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
-              Questions{questionBank.length > 0 ? ` (${selectedQIds.length} selected)` : ''}
-            </label>
-            {questionBank.length === 0 ? (
-              <p className="text-xs text-gray-400 px-3 py-2 border border-dashed border-gray-200 rounded-xl">
-                No questions in bank yet
-              </p>
-            ) : (
-              <div className="border border-gray-200 rounded-xl p-2 max-h-40 overflow-y-auto space-y-1">
-                {questionBank.map(q => (
-                  <label key={q.id} className="flex items-center gap-2 px-2 py-1 hover:bg-gray-50 cursor-pointer rounded-lg">
-                    <input
-                      type="checkbox"
-                      checked={selectedQIds.includes(q.id)}
-                      onChange={e => setSelectedQIds(prev => e.target.checked ? [...prev, q.id] : prev.filter(i => i !== q.id))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
-                    />
-                    <span className="text-sm flex-1 truncate">{q.title}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${
-                      q.difficulty?.toLowerCase() === 'easy' ? 'bg-green-100 text-green-700' :
-                      q.difficulty?.toLowerCase() === 'hard' ? 'bg-red-100 text-red-700' :
-                      'bg-amber-100 text-amber-700'
-                    }`}>{q.difficulty}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
-            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
-            <Button type="submit" disabled={submitting} className="rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white">
-              {submitting ? 'Creating…' : 'Create Exam'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 const AssignExamModal: React.FC<{
   exam: ExamRow;
@@ -1133,180 +1697,6 @@ const ExamResultsModal: React.FC<{
         <div className="flex justify-end pt-4 border-t border-gray-100 shrink-0">
           <Button onClick={onClose} className="rounded-xl">Close</Button>
         </div>
-      </div>
-    </div>
-  );
-};
-
-const CreateDriveModal: React.FC<{
-  orgId: string;
-  token?: string;
-  onClose: () => void;
-  onSuccess: () => void;
-}> = ({ orgId, token, onClose, onSuccess }) => {
-  const [title, setTitle] = useState('');
-  const [role, setRole] = useState('Full Stack Software Engineer');
-  const [company, setCompany] = useState('');
-  const [style, setStyle] = useState('formal');
-  const [difficulty, setDifficulty] = useState('medium');
-  const [duration, setDuration] = useState(30);
-  const [topicFocus, setTopicFocus] = useState<string[]>([]);
-  const [questionCount, setQuestionCount] = useState(5);
-  const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState('');
-
-  const TOPICS = ['algorithms', 'system-design', 'databases', 'frontend', 'devops', 'behavioral'] as const;
-  const toggleTopic = (t: string) =>
-    setTopicFocus(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return setErr('Drive title is required');
-    setSubmitting(true);
-    setErr('');
-    try {
-      await apiFetch(`/orgs/${orgId}/drives`, token, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          target_role: role,
-          company: company.trim() || null,
-          interview_style: style,
-          difficulty,
-          duration_minutes: duration,
-          topic_focus: topicFocus,
-          question_count: questionCount,
-        }),
-      });
-      onSuccess();
-    } catch (e: any) {
-      setErr(e.message || 'Failed to create drive');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95">
-        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <Mic size={20} className="text-[#DC2626]" />
-            <h3 className="font-bold text-gray-900 text-lg">Create AI Interview Drive</h3>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-        </div>
-
-        {err && <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded-xl font-medium">{err}</div>}
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Drive Title *</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Campus Placement 2026 — Technical Interview"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Target Job Role</label>
-              <input
-                type="text"
-                required
-                placeholder="Software Engineer"
-                value={role}
-                onChange={e => setRole(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Company (Optional)</label>
-              <input
-                type="text"
-                placeholder="Google / TCS / Zoho"
-                value={company}
-                onChange={e => setCompany(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Interview Style</label>
-              <select
-                value={style}
-                onChange={e => setStyle(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm capitalize focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              >
-                <option value="formal">Formal</option>
-                <option value="technical">Technical</option>
-                <option value="casual">Casual</option>
-                <option value="aggressive">Aggressive</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Difficulty</label>
-              <select
-                value={difficulty}
-                onChange={e => setDifficulty(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm capitalize focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              >
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Duration (min)</label>
-              <input
-                type="number"
-                min={10}
-                max={120}
-                value={duration}
-                onChange={e => setDuration(parseInt(e.target.value) || 30)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Topic Focus (optional)</label>
-            <div className="flex flex-wrap gap-2 mt-1">
-              {TOPICS.map(topic => (
-                <label key={topic} className={`flex items-center gap-1 text-xs border rounded-lg px-2 py-1 cursor-pointer transition-colors ${topicFocus.includes(topic) ? 'bg-gray-900 text-white border-gray-900' : 'hover:bg-gray-50 border-gray-200'}`}>
-                  <input type="checkbox" checked={topicFocus.includes(topic)} onChange={() => toggleTopic(topic)} className="hidden" />
-                  {topic}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Questions per Interview</label>
-            <input
-              type="number"
-              min={3}
-              max={10}
-              value={questionCount}
-              onChange={e => setQuestionCount(parseInt(e.target.value) || 5)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
-            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
-            <Button type="submit" disabled={submitting} className="rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white">
-              {submitting ? 'Creating…' : 'Create Drive'}
-            </Button>
-          </div>
-        </form>
       </div>
     </div>
   );

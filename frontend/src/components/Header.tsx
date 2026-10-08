@@ -10,6 +10,10 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
+  // Inside Safe Exam Browser, NEVER render website header or tabs
+  const isSEB = typeof window !== 'undefined' && (/SEB|SafeExamBrowser/i.test(navigator.userAgent || '') || !!(window as any).SafeExamBrowser);
+  if (isSEB) return null;
+
   const { user, logout, isAuthenticated, isCandidate, isFaculty, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

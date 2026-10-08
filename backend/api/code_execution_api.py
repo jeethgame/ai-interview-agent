@@ -4,13 +4,43 @@ import os
 import time
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.api.auth_api import get_current_user
+from backend.api.auth_api import get_current_user, get_current_user_optional
 from backend.services.coding_question_service import get_hidden_test_cases
 
 router = APIRouter()
+
+
+async def get_execution_user(
+    request: Request,
+    user: dict | None = Depends(get_current_user_optional),
+) -> dict:
+    """Authenticate code execution request via Bearer header, URL query token, or SEB/mock session."""
+    if user:
+        return user
+
+    token = request.query_params.get("auth_token") or request.query_params.get("token")
+    if token:
+        try:
+            from backend.api.auth_api import _decode_token, _extract_role_from_payload
+            payload = await _decode_token(token)
+            return {
+                "id": payload.get("sub", "candidate"),
+                "email": payload.get("email", ""),
+                "name": payload.get("name", ""),
+                "role": _extract_role_from_payload(payload),
+            }
+        except Exception:
+            pass
+
+    user_agent = request.headers.get("user-agent", "").lower()
+    seb_header = request.headers.get("x-safeexambrowser-requesthash") or request.headers.get("x-seb-configkey")
+    if "seb" in user_agent or "safeexambrowser" in user_agent or seb_header or os.getenv("USE_MOCK_AUTH", "true").lower() in ("true", "1", "yes"):
+        return {"id": "candidate-user", "email": "candidate@stjosephs.edu", "name": "Candidate", "role": "candidate"}
+
+    raise HTTPException(status_code=401, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
 
 
 LANGUAGE_IDS = {
@@ -84,15 +114,8 @@ def _get_judge0_config():
             detail="JUDGE0_URL is not configured",
         )
 
-    if not auth_token:
-        raise HTTPException(
-            status_code=500,
-            detail="JUDGE0_AUTH_TOKEN is not configured",
-        )
-
-    return judge0_url, {
-        auth_header: auth_token,
-    }
+    headers = {auth_header: auth_token} if auth_token else {}
+    return judge0_url, headers
 
 
 def _execute_test_case(
@@ -255,9 +278,9 @@ def _execute_test_case(
 
 
 @router.post("/submit")
-def submit_code(
+async def submit_code(
     request: SubmitRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_execution_user),
 ):
     if not request.source_code.strip():
         raise HTTPException(
@@ -369,9 +392,9 @@ def submit_code(
 
 
 @router.post("/run")
-def run_code(
+async def run_code(
     request: RunRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_execution_user),
 ):
     if not request.source_code.strip():
         raise HTTPException(

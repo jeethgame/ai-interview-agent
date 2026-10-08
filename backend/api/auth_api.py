@@ -424,8 +424,9 @@ def create_auth_api(app):
     async def login(body: LoginRequest):
         if USE_MOCK_AUTH:
             uid = _stable_mock_id(body.email)
+            existing_role = await _resolve_role_from_db(uid)
             display_name = body.email.split("@")[0]
-            role = _mock_role(body.email)
+            role = existing_role or _mock_role(body.email)
             await _ensure_platform_user(uid, body.email, display_name, role)
             return _mock_tokens(uid, body.email, display_name, role)
         if not _cognito_available():

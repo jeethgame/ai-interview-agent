@@ -1,0 +1,787 @@
+diff --git a/backend/api/auth_api.py b/backend/api/auth_api.py
+index 8137ea1..323f6d0 100644
+--- a/backend/api/auth_api.py
++++ b/backend/api/auth_api.py
+@@ -12,16 +12,46 @@ Same endpoint contract as before (frontend unchanged):
+ When COGNITO_USER_POOL_ID is set, uses Cognito.
+ Falls back to mock JWT for local development (USE_MOCK_AUTH=true).
+ """
+ import asyncio
+ import json
+ import os
++import time
+ import uuid
+ from datetime import datetime
+ from typing import Any
+ 
++# Simple in-memory cache for DB role lookups (avoids hitting DB on every request)
++_role_cache: dict[str, tuple[float, str]] = {}  # user_id → (timestamp, role)
++_ROLE_CACHE_TTL = 300  # 5 minutes
++
++
++async def _resolve_role_from_db(user_id: str) -> str | None:
++    """Fallback: look up role from platform_users when token claims don't have it."""
++    now = time.time()
++    if user_id in _role_cache:
++        ts, cached_role = _role_cache[user_id]
++        if now - ts < _ROLE_CACHE_TTL:
++            return cached_role
++    try:
++        from sqlalchemy import text
++
++        from backend.database import AsyncSessionLocal
++        async with AsyncSessionLocal() as db:
++            r = await db.execute(
++                text("SELECT role FROM platform_users WHERE id = :uid"),
++                {"uid": user_id},
++            )
++            row = r.fetchone()
++            if row and row[0] in {"candidate", "faculty", "admin"}:
++                _role_cache[user_id] = (now, row[0])
++                return row[0]
++    except Exception:
++        pass
++    return None
++
+ try:
+     import boto3
+     from botocore.exceptions import ClientError
+ except ImportError:
+     boto3 = None
+     class ClientError(Exception):
+@@ -180,12 +210,18 @@ async def get_current_user(
+             raise HTTPException(
+                 status_code=401,
+                 detail="Invalid token: missing subject claim",
+                 headers={"WWW-Authenticate": "Bearer"},
+             )
+         role = _extract_role_from_payload(payload)
++        # If token claims don't carry role (e.g. Cognito without custom:role),
++        # fall back to the stored role in platform_users.
++        if role == ROLE_CANDIDATE and not USE_MOCK_AUTH:
++            db_role = await _resolve_role_from_db(user_id)
++            if db_role:
++                role = db_role
+         return {
+             "id": user_id,
+             "email": payload.get("email", ""),
+             "name": payload.get("name", ""),
+             "role": role,
+             "payload": payload,
+@@ -296,16 +332,19 @@ async def _ensure_platform_user(user_id: str, email: str, name: str, role: str,
+     """Upsert a platform_users row so institutional queries work."""
+     try:
+         from sqlalchemy import text
+ 
+         from backend.database import AsyncSessionLocal
+         async with AsyncSessionLocal() as db:
++            # ON CONFLICT: update name/email but never downgrade an existing role
+             await db.execute(text(
+                 "INSERT INTO platform_users (id, email, name, role, auth_provider, data_consent_given, created_at, updated_at) "
+                 "VALUES (:id, :email, :name, :role, :provider, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+-                "ON CONFLICT (id) DO UPDATE SET name = :name, role = :role, email = :email, updated_at = CURRENT_TIMESTAMP"
++                "ON CONFLICT (id) DO UPDATE SET "
++                "  name = :name, email = :email, updated_at = CURRENT_TIMESTAMP, "
++                "  role = CASE WHEN platform_users.role IN ('admin','faculty') THEN platform_users.role ELSE :role END"
+             ), {"id": user_id, "email": email, "name": name, "role": role, "provider": auth_provider})
+             await db.commit()
+     except Exception as e:
+         logger.error(f"platform_users upsert failed: {type(e).__name__}: {e}")
+ 
+ 
+diff --git a/backend/api/exams.py b/backend/api/exams.py
+index e7500ae..f1e6028 100644
+--- a/backend/api/exams.py
++++ b/backend/api/exams.py
+@@ -1,24 +1,28 @@
+ import json
++import logging
+ from datetime import datetime
+ 
+ from fastapi import APIRouter, Depends, HTTPException
+ from pydantic import BaseModel
+ from sqlalchemy import select
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from backend.api.auth_api import get_current_user, require_role
+ from backend.database import get_db
+ from backend.models.formal_exam import ExamAttempt, FormalExam
+ 
++logger = logging.getLogger(__name__)
++
+ router = APIRouter(prefix="/exams", tags=["Formal Exam Portal & SEB Lockdown (Member B4)"])
+ 
+ class CreateExamRequest(BaseModel):
+     title: str
+     description: str = "Formal Scheduled Coding Examination"
+     duration_minutes: int = 60
++    difficulty: str = "medium"  # easy | medium | hard
+     seb_required: bool = True
+     max_infractions: int = 3
+     question_ids: list[str] = []
+ 
+ class StartAttemptRequest(BaseModel):
+     candidate_id: str
+@@ -33,12 +37,13 @@ class SubmitExamRequest(BaseModel):
+ 
+ class ExamResponse(BaseModel):
+     id: str
+     title: str
+     description: str
+     duration_minutes: int
++    difficulty: str = "medium"
+     seb_required: bool
+     max_infractions: int
+     is_active: bool
+ 
+ class AttemptResponse(BaseModel):
+     id: str
+@@ -46,35 +51,69 @@ class AttemptResponse(BaseModel):
+     candidate_id: str
+     infraction_count: int
+     status: str  # IN_PROGRESS, SUBMITTED, DISQUALIFIED
+     score: int
+     started_at: datetime
+ 
++async def _score_submission(exam: FormalExam, answers: dict) -> int:
++    """Run each answer against hidden test cases via Judge0. Returns 0-100."""
++    if not answers:
++        return 0
++    try:
++        from backend.api.code_execution_api import LANGUAGE_IDS, _execute_test_case
++        from backend.services.coding_question_service import get_hidden_test_cases
++
++        question_ids = json.loads(exam.question_ids or "[]")
++        if not question_ids:
++            return 0
++        total, passed = 0, 0
++        for qid in question_ids:
++            answer = answers.get(str(qid)) or answers.get(qid)
++            if not answer:
++                continue
++            source_code = answer.get("source_code", "")
++            language = answer.get("language", "python").lower()
++            if language not in LANGUAGE_IDS:
++                continue
++            test_cases = get_hidden_test_cases(str(qid))
++            for tc in test_cases:
++                total += 1
++                result = _execute_test_case(source_code, language, tc)
++                if result.get("status") == "passed":
++                    passed += 1
++        return round((passed / total) * 100) if total > 0 else 0
++    except Exception as e:
++        logger.warning("Scoring failed, defaulting to 0: %s", e)
++        return 0
++
++
+ @router.post("/create", response_model=ExamResponse)
+ async def create_exam(
+     req: CreateExamRequest,
+     db: AsyncSession = Depends(get_db),
+     user: dict = require_role("admin", "faculty"),
+ ):
+     """Create a formal scheduled coding assessment with lockdown integrity constraints."""
+     exam = FormalExam(
+         title=req.title,
+         description=req.description,
+         duration_minutes=req.duration_minutes,
++        difficulty=req.difficulty,
+         seb_required=req.seb_required,
+         max_infractions=req.max_infractions,
+         question_ids=json.dumps(req.question_ids),
+     )
+     db.add(exam)
+     await db.flush()
+ 
+     return ExamResponse(
+         id=exam.id,
+         title=exam.title,
+         description=exam.description,
+         duration_minutes=exam.duration_minutes,
++        difficulty=exam.difficulty,
+         seb_required=exam.seb_required,
+         max_infractions=exam.max_infractions,
+         is_active=exam.is_active,
+     )
+ 
+ @router.get("/{exam_id}", response_model=ExamResponse)
+@@ -90,12 +129,13 @@ async def get_exam(
+ 
+     return ExamResponse(
+         id=exam.id,
+         title=exam.title,
+         description=exam.description,
+         duration_minutes=exam.duration_minutes,
++        difficulty=exam.difficulty,
+         seb_required=exam.seb_required,
+         max_infractions=exam.max_infractions,
+         is_active=exam.is_active,
+     )
+ 
+ @router.post("/{exam_id}/start", response_model=AttemptResponse)
+@@ -233,15 +273,16 @@ async def submit_exam_attempt(
+     if not attempt:
+         raise HTTPException(status_code=404, detail="Exam attempt not found")
+ 
+     if attempt.status == "DISQUALIFIED":
+         raise HTTPException(status_code=403, detail="Attempt was disqualified due to integrity infractions")
+ 
++    exam = await db.get(FormalExam, exam_id)
+     attempt.status = "SUBMITTED"
+     attempt.submitted_at = datetime.utcnow()
+-    attempt.score = 85  # baseline score calculated from passed test cases
++    attempt.score = await _score_submission(exam, req.answers)
+     await db.flush()
+ 
+     try:
+         from sqlalchemy import text
+         cid = req.candidate_id or user.get("id")
+         await db.execute(
+diff --git a/backend/api/institutional_api.py b/backend/api/institutional_api.py
+index 75abdd3..faf37d5 100644
+--- a/backend/api/institutional_api.py
++++ b/backend/api/institutional_api.py
+@@ -88,12 +88,14 @@ class DriveCreate(BaseModel):
+     target_role: str
+     company: str | None = None
+     scheduled_at: datetime | None = None
+     duration_minutes: int = 30
+     interview_style: str = "formal"
+     difficulty: str = "medium"
++    topic_focus: list[str] = []
++    question_count: int = 5
+ 
+ class DriveResponse(BaseModel):
+     id: str
+     title: str
+     target_role: str
+     company: str | None
+@@ -349,19 +351,24 @@ async def create_drive(org_id: str, body: DriveCreate, user: dict = require_role
+                 await _ensure_default_org(db, org_id)
+             did = str(uuid.uuid4())
+             await db.execute(text("""
+                 INSERT INTO placement_drives
+                   (id, org_id, title, target_role, company, scheduled_at,
+                    duration_minutes, interview_style, difficulty, status,
++                   topic_focus, question_count,
+                    created_by, created_at, updated_at)
+                 VALUES (:id, :org_id, :title, :role, :company, :sched,
+-                        :dur, :style, :diff, 'active', :creator, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
++                        :dur, :style, :diff, 'active',
++                        :topic_focus, :question_count,
++                        :creator, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             """), {"id": did, "org_id": org_id, "title": body.title,
+                    "role": body.target_role, "company": body.company,
+                    "sched": body.scheduled_at, "dur": body.duration_minutes,
+                    "style": body.interview_style, "diff": body.difficulty,
++                   "topic_focus": ",".join(body.topic_focus),
++                   "question_count": body.question_count,
+                    "creator": user.get("id")})
+             await db.commit()
+             return DriveResponse(id=did, title=body.title, target_role=body.target_role,
+                                  company=body.company, status="active")
+     except Exception as e:
+         logger.error(f"create_drive failed: {e}")
+@@ -494,12 +501,43 @@ async def get_drive_results(org_id: str, drive_id: str, user: dict = require_rol
+         logger.error(f"get_drive_results failed: {e}")
+         raise HTTPException(status_code=500, detail="Failed to fetch drive results")
+ 
+ 
+ # ── Exam Assignment (Formal Coding Tests) ────────────────────────────────
+ 
++class OrgExamCreateRequest(BaseModel):
++    title: str
++    description: str = "Formal Scheduled Coding Examination"
++    duration_minutes: int = 60
++    difficulty: str = "medium"
++    seb_required: bool = True
++    max_infractions: int = 3
++    question_ids: list[str] = []
++
++
++@router.post("/{org_id}/exams/create")
++async def create_exam_for_org(
++    org_id: str,
++    req: OrgExamCreateRequest,
++    user: dict = require_role("admin", "faculty"),
++):
++    """Admin creates a formal exam scoped to an org."""
++    from backend.api.exams import CreateExamRequest, create_exam
++    body = CreateExamRequest(
++        title=req.title,
++        description=req.description,
++        duration_minutes=req.duration_minutes,
++        difficulty=req.difficulty,
++        seb_required=req.seb_required,
++        max_infractions=req.max_infractions,
++        question_ids=req.question_ids,
++    )
++    async with _db() as db:
++        return await create_exam(body, db, user)
++
++
+ @router.get("/{org_id}/exams")
+ async def list_exams(org_id: str, user: dict = require_role("admin", "faculty")):
+     try:
+         from sqlalchemy import text
+         async with _db() as db:
+             r = await db.execute(text("""
+diff --git a/backend/database/__init__.py b/backend/database/__init__.py
+index 27e8b25..45d24e0 100644
+--- a/backend/database/__init__.py
++++ b/backend/database/__init__.py
+@@ -90,8 +90,40 @@ async def init_db() -> None:
+                     UNIQUE(user_id, session_id)
+                 )
+             """))
+         await conn.execute(text(
+             "CREATE INDEX IF NOT EXISTS ix_scorecard_user ON candidate_scorecards(user_id)"
+         ))
++        # Add difficulty to formal_exams if missing (Alembic-free migration)
++        try:
++            await conn.execute(text("ALTER TABLE formal_exams ADD COLUMN difficulty VARCHAR(50) DEFAULT 'medium'"))
++        except Exception:
++            pass  # Column already exists
++
++        # Add topic_focus / question_count to placement_drives if missing
++        try:
++            await conn.execute(text("ALTER TABLE placement_drives ADD COLUMN topic_focus TEXT DEFAULT ''"))
++        except Exception:
++            pass  # Column already exists
++        try:
++            await conn.execute(text("ALTER TABLE placement_drives ADD COLUMN question_count INTEGER DEFAULT 5"))
++        except Exception:
++            pass  # Column already exists
++
++        # Seed correct roles for any existing platform_users whose email signals
++        # admin or faculty, but whose role is still 'candidate' (e.g. pre-provisioned
++        # accounts or Cognito users registered before custom:role was set).
++        try:
++            await conn.execute(text("""
++                UPDATE platform_users
++                SET role = CASE
++                    WHEN LOWER(email) LIKE '%admin%'   THEN 'admin'
++                    WHEN LOWER(email) LIKE '%faculty%' THEN 'faculty'
++                    ELSE role
++                END
++                WHERE role = 'candidate'
++                  AND (LOWER(email) LIKE '%admin%' OR LOWER(email) LIKE '%faculty%')
++            """))
++        except Exception:
++            pass
+ 
+ __all__ = ["AsyncSessionLocal", "Base", "DatabaseManager", "get_db", "get_question_bank_db", "init_db"]
+\ No newline at end of file
+diff --git a/backend/models/formal_exam.py b/backend/models/formal_exam.py
+index 38715f9..82f28d1 100644
+--- a/backend/models/formal_exam.py
++++ b/backend/models/formal_exam.py
+@@ -14,12 +14,13 @@ class FormalExam(Base):
+     title = Column(String(255), nullable=False)
+     description = Column(Text, default="", nullable=False)
+     duration_minutes = Column(Integer, default=60, nullable=False)
+     seb_required = Column(Boolean, default=True, nullable=False)
+     max_infractions = Column(Integer, default=3, nullable=False)
+     question_ids = Column(Text, default="[]", nullable=False)  # JSON array of Question UUIDs
++    difficulty = Column(String(50), default="medium", nullable=False)
+     is_active = Column(Boolean, default=True, nullable=False)
+     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+ 
+ class ExamAttempt(Base):
+     """Candidate attempt record tracking integrity events, infractions, code drafts, and final score."""
+     __tablename__ = "exam_attempts"
+diff --git a/frontend/src/components/AdminDashboard.tsx b/frontend/src/components/AdminDashboard.tsx
+index ec68aa4..dd3cb4d 100644
+--- a/frontend/src/components/AdminDashboard.tsx
++++ b/frontend/src/components/AdminDashboard.tsx
+@@ -353,12 +353,20 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
+         ))}
+       </div>
+ 
+       {/* ── Tab 1: Overview ────────────────────────────────────────────── */}
+       {activeTab === 'overview' && (
+         <div className="space-y-6">
++          {summary && (
++            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
++              <StatCard label="Total Assigned" value={summary.total_assigned} icon={<Target size={18} />} />
++              <StatCard label="Completed" value={summary.total_completed} icon={<TrendingUp size={18} />} />
++              <StatCard label="Completion Rate" value={`${summary.completion_rate ?? 0}%`} icon={<BarChart3 size={18} />} />
++              <StatCard label="Avg Exam Score" value={summary.exams?.avg_exam_score != null ? `${summary.exams.avg_exam_score}/100` : '—'} icon={<Award size={18} />} />
++            </div>
++          )}
+           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+               <div>
+                 <h2 className="font-bold text-gray-800 text-base">Cohort Performance Breakdown</h2>
+                 <p className="text-xs text-gray-400">Class and department level completion and readiness</p>
+               </div>
+@@ -709,17 +717,24 @@ const CreateExamModal: React.FC<{
+   onClose: () => void;
+   onSuccess: () => void;
+ }> = ({ token, onClose, onSuccess }) => {
+   const [title, setTitle] = useState('');
+   const [description, setDescription] = useState('');
+   const [duration, setDuration] = useState(60);
++  const [difficulty, setDifficulty] = useState('medium');
+   const [maxInfractions, setMaxInfractions] = useState(3);
+   const [sebRequired, setSebRequired] = useState(true);
++  const [questionBank, setQuestionBank] = useState<{ id: string; title: string; difficulty: string; category: string }[]>([]);
++  const [selectedQIds, setSelectedQIds] = useState<string[]>([]);
+   const [submitting, setSubmitting] = useState(false);
+   const [err, setErr] = useState('');
+ 
++  useEffect(() => {
++    apiFetch('/questions?limit=50', token).then(setQuestionBank).catch(() => setQuestionBank([]));
++  }, []);
++
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!title.trim()) return setErr('Exam title is required');
+     setSubmitting(true);
+     setErr('');
+     try {
+@@ -727,28 +742,29 @@ const CreateExamModal: React.FC<{
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           title,
+           description,
+           duration_minutes: duration,
++          difficulty,
+           max_infractions: maxInfractions,
+           seb_required: sebRequired,
+-          question_ids: [],
++          question_ids: selectedQIds,
+         }),
+       });
+       onSuccess();
+     } catch (e: any) {
+       setErr(e.message || 'Failed to create exam');
+     } finally {
+       setSubmitting(false);
+     }
+   };
+ 
+   return (
+     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95">
++      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+         <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+           <div className="flex items-center gap-2">
+             <Code2 size={20} className="text-[#DC2626]" />
+             <h3 className="font-bold text-gray-900 text-lg">Create Coding Exam</h3>
+           </div>
+           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+@@ -777,26 +793,38 @@ const CreateExamModal: React.FC<{
+               value={description}
+               onChange={e => setDescription(e.target.value)}
+               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+             />
+           </div>
+ 
+-          <div className="grid grid-cols-2 gap-3">
++          <div className="grid grid-cols-3 gap-3">
+             <div>
+-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Duration (minutes)</label>
++              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Duration (min)</label>
+               <input
+                 type="number"
+                 min={10}
+                 max={300}
+                 value={duration}
+                 onChange={e => setDuration(parseInt(e.target.value) || 60)}
+                 className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+               />
+             </div>
+             <div>
+-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Max Infractions</label>
++              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Difficulty</label>
++              <select
++                value={difficulty}
++                onChange={e => setDifficulty(e.target.value)}
++                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
++              >
++                <option value="easy">Easy</option>
++                <option value="medium">Medium</option>
++                <option value="hard">Hard</option>
++              </select>
++            </div>
++            <div>
++              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Max Strikes</label>
+               <input
+                 type="number"
+                 min={1}
+                 max={10}
+                 value={maxInfractions}
+                 onChange={e => setMaxInfractions(parseInt(e.target.value) || 3)}
+@@ -815,12 +843,43 @@ const CreateExamModal: React.FC<{
+             />
+             <label htmlFor="seb" className="text-xs text-gray-700 font-medium">
+               Enable Safe Exam Browser (SEB) & proctoring guard
+             </label>
+           </div>
+ 
++          {/* Question picker */}
++          <div>
++            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
++              Questions{questionBank.length > 0 ? ` (${selectedQIds.length} selected)` : ''}
++            </label>
++            {questionBank.length === 0 ? (
++              <p className="text-xs text-gray-400 px-3 py-2 border border-dashed border-gray-200 rounded-xl">
++                No questions in bank yet
++              </p>
++            ) : (
++              <div className="border border-gray-200 rounded-xl p-2 max-h-40 overflow-y-auto space-y-1">
++                {questionBank.map(q => (
++                  <label key={q.id} className="flex items-center gap-2 px-2 py-1 hover:bg-gray-50 cursor-pointer rounded-lg">
++                    <input
++                      type="checkbox"
++                      checked={selectedQIds.includes(q.id)}
++                      onChange={e => setSelectedQIds(prev => e.target.checked ? [...prev, q.id] : prev.filter(i => i !== q.id))}
++                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
++                    />
++                    <span className="text-sm flex-1 truncate">{q.title}</span>
++                    <span className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${
++                      q.difficulty?.toLowerCase() === 'easy' ? 'bg-green-100 text-green-700' :
++                      q.difficulty?.toLowerCase() === 'hard' ? 'bg-red-100 text-red-700' :
++                      'bg-amber-100 text-amber-700'
++                    }`}>{q.difficulty}</span>
++                  </label>
++                ))}
++              </div>
++            )}
++          </div>
++
+           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+             <Button type="submit" disabled={submitting} className="rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white">
+               {submitting ? 'Creating…' : 'Create Exam'}
+             </Button>
+           </div>
+@@ -1088,15 +1147,21 @@ const CreateDriveModal: React.FC<{
+   const [title, setTitle] = useState('');
+   const [role, setRole] = useState('Full Stack Software Engineer');
+   const [company, setCompany] = useState('');
+   const [style, setStyle] = useState('formal');
+   const [difficulty, setDifficulty] = useState('medium');
+   const [duration, setDuration] = useState(30);
++  const [topicFocus, setTopicFocus] = useState<string[]>([]);
++  const [questionCount, setQuestionCount] = useState(5);
+   const [submitting, setSubmitting] = useState(false);
+   const [err, setErr] = useState('');
+ 
++  const TOPICS = ['algorithms', 'system-design', 'databases', 'frontend', 'devops', 'behavioral'] as const;
++  const toggleTopic = (t: string) =>
++    setTopicFocus(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
++
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!title.trim()) return setErr('Drive title is required');
+     setSubmitting(true);
+     setErr('');
+     try {
+@@ -1107,12 +1172,14 @@ const CreateDriveModal: React.FC<{
+           title,
+           target_role: role,
+           company: company.trim() || null,
+           interview_style: style,
+           difficulty,
+           duration_minutes: duration,
++          topic_focus: topicFocus,
++          question_count: questionCount,
+         }),
+       });
+       onSuccess();
+     } catch (e: any) {
+       setErr(e.message || 'Failed to create drive');
+     } finally {
+@@ -1206,12 +1273,36 @@ const CreateDriveModal: React.FC<{
+                 onChange={e => setDuration(parseInt(e.target.value) || 30)}
+                 className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+               />
+             </div>
+           </div>
+ 
++          <div>
++            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Topic Focus (optional)</label>
++            <div className="flex flex-wrap gap-2 mt-1">
++              {TOPICS.map(topic => (
++                <label key={topic} className={`flex items-center gap-1 text-xs border rounded-lg px-2 py-1 cursor-pointer transition-colors ${topicFocus.includes(topic) ? 'bg-gray-900 text-white border-gray-900' : 'hover:bg-gray-50 border-gray-200'}`}>
++                  <input type="checkbox" checked={topicFocus.includes(topic)} onChange={() => toggleTopic(topic)} className="hidden" />
++                  {topic}
++                </label>
++              ))}
++            </div>
++          </div>
++
++          <div>
++            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Questions per Interview</label>
++            <input
++              type="number"
++              min={3}
++              max={10}
++              value={questionCount}
++              onChange={e => setQuestionCount(parseInt(e.target.value) || 5)}
++              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
++            />
++          </div>
++
+           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+             <Button type="submit" disabled={submitting} className="rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white">
+               {submitting ? 'Creating…' : 'Create Drive'}
+             </Button>
+           </div>
+diff --git a/frontend/src/services/api.ts b/frontend/src/services/api.ts
+index ae96258..351bc28 100644
+--- a/frontend/src/services/api.ts
++++ b/frontend/src/services/api.ts
+@@ -778,6 +778,35 @@ export interface ScorecardHistoryItem {
+ export async function getScorecardHistory(limit = 20): Promise<ScorecardHistoryItem[]> {
+   const response = await fetch(`${API_BASE_URL}/interview/scorecard/history?limit=${limit}`, {
+     headers: getAuthHeaders(),
+   });
+   return handleResponse(response);
+ }
++
++// ── Admin Exam Management ─────────────────────────────────────────────────
++
++export interface CreateExamPayload {
++  title: string;
++  description?: string;
++  duration_minutes: number;
++  difficulty: string;
++  seb_required: boolean;
++  max_infractions: number;
++  question_ids: string[];
++}
++
++export async function createExam(data: CreateExamPayload, token?: string): Promise<any> {
++  const response = await fetch(`${API_BASE_URL}/exams/create`, {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
++    body: JSON.stringify(data),
++  });
++  return handleResponse(response);
++}
++
++export async function getQuestions(token?: string): Promise<any[]> {
++  const response = await fetch(`${API_BASE_URL}/questions?limit=50`, {
++    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
++  });
++  if (!response.ok) return [];
++  return response.json();
++}
+diff --git a/infra/cognito-role-trigger/deploy.sh b/infra/cognito-role-trigger/deploy.sh
+new file mode 100644
+index 0000000..8d712e0
+--- /dev/null
++++ b/infra/cognito-role-trigger/deploy.sh
+@@ -0,0 +1,80 @@
++#!/usr/bin/env bash
++# Deploy project08-cognito-role-trigger Lambda and attach it to the Cognito User Pool.
++# Requires AWS profile 'p08' with permissions for IAM, Lambda, and Cognito IDP.
++#
++# Usage: bash infra/cognito-role-trigger/deploy.sh
++
++set -euo pipefail
++
++PROFILE="p08"
++REGION="ap-south-1"
++ACCOUNT="975903044204"
++FUNCTION_NAME="project08-cognito-role-trigger"
++ROLE_NAME="project08-lambda-role"
++USER_POOL_ID="ap-south-1_NfT5QjYyc"
++SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
++
++echo "==> 1. Create IAM role (skip if exists)"
++aws iam create-role \
++  --role-name "$ROLE_NAME" \
++  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}' \
++  --profile "$PROFILE" 2>/dev/null || echo "     Role already exists, continuing."
++
++aws iam attach-role-policy \
++  --role-name "$ROLE_NAME" \
++  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole \
++  --profile "$PROFILE" 2>/dev/null || true
++
++echo "==> 2. Wait for role to propagate"
++sleep 10
++
++echo "==> 3. Package Lambda"
++cd "$SCRIPT_DIR"
++zip -j function.zip index.py
++
++echo "==> 4. Create or update Lambda function"
++ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/${ROLE_NAME}"
++
++if aws lambda get-function --function-name "$FUNCTION_NAME" --profile "$PROFILE" --region "$REGION" &>/dev/null; then
++  echo "     Updating existing function code..."
++  aws lambda update-function-code \
++    --function-name "$FUNCTION_NAME" \
++    --zip-file fileb://function.zip \
++    --profile "$PROFILE" --region "$REGION"
++else
++  echo "     Creating new function..."
++  aws lambda create-function \
++    --function-name "$FUNCTION_NAME" \
++    --runtime python3.11 \
++    --handler index.handler \
++    --zip-file fileb://function.zip \
++    --role "$ROLE_ARN" \
++    --profile "$PROFILE" --region "$REGION"
++fi
++
++echo "==> 5. Get Lambda ARN"
++LAMBDA_ARN=$(aws lambda get-function \
++  --function-name "$FUNCTION_NAME" \
++  --profile "$PROFILE" --region "$REGION" \
++  --query 'Configuration.FunctionArn' --output text)
++echo "     ARN: $LAMBDA_ARN"
++
++echo "==> 6. Grant Cognito permission to invoke Lambda"
++aws lambda add-permission \
++  --function-name "$FUNCTION_NAME" \
++  --statement-id cognito-trigger \
++  --action lambda:InvokeFunction \
++  --principal cognito-idp.amazonaws.com \
++  --source-arn "arn:aws:cognito-idp:${REGION}:${ACCOUNT}:userpool/${USER_POOL_ID}" \
++  --profile "$PROFILE" --region "$REGION" 2>/dev/null || echo "     Permission already exists, continuing."
++
++echo "==> 7. Attach Pre-Token-Generation trigger to User Pool"
++aws cognito-idp update-user-pool \
++  --user-pool-id "$USER_POOL_ID" \
++  --lambda-config "PreTokenGeneration=$LAMBDA_ARN" \
++  --profile "$PROFILE" --region "$REGION"
++
++echo ""
++echo "Done. To verify, authenticate a user and decode the ID token's middle section:"
++echo "  echo \$TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | python -m json.tool | grep role"
++echo "Expected: \"role\": \"admin\"  (or faculty/candidate depending on the user)"
+diff --git a/infra/cognito-role-trigger/index.py b/infra/cognito-role-trigger/index.py
+new file mode 100644
+index 0000000..799e8d1
+--- /dev/null
++++ b/infra/cognito-role-trigger/index.py
+@@ -0,0 +1,20 @@
++def handler(event, context):
++    """
++    Pre-Token-Generation Lambda trigger.
++    Injects custom:role from user attributes into the ID token as 'role' claim.
++    """
++    attrs = event.get('request', {}).get('userAttributes', {})
++    role = attrs.get('custom:role', 'candidate')
++
++    # Validate — only allow known roles
++    if role not in ('candidate', 'faculty', 'admin'):
++        role = 'candidate'
++
++    event['response'] = {
++        'claimsOverrideDetails': {
++            'claimsToAddOrOverride': {
++                'role': role,
++            }
++        }
++    }
++    return event

@@ -1,0 +1,85 @@
+diff --git a/backend/api/auth_api.py b/backend/api/auth_api.py
+index 9f348d7..323f6d0 100644
+--- a/backend/api/auth_api.py
++++ b/backend/api/auth_api.py
+@@ -31,12 +31,13 @@ async def _resolve_role_from_db(user_id: str) -> str | None:
+     if user_id in _role_cache:
+         ts, cached_role = _role_cache[user_id]
+         if now - ts < _ROLE_CACHE_TTL:
+             return cached_role
+     try:
+         from sqlalchemy import text
++
+         from backend.database import AsyncSessionLocal
+         async with AsyncSessionLocal() as db:
+             r = await db.execute(
+                 text("SELECT role FROM platform_users WHERE id = :uid"),
+                 {"uid": user_id},
+             )
+diff --git a/backend/api/exams.py b/backend/api/exams.py
+index 017745b..6169e88 100644
+--- a/backend/api/exams.py
++++ b/backend/api/exams.py
+@@ -94,13 +94,13 @@ async def get_exam(
+ 
+     return ExamResponse(
+         id=exam.id,
+         title=exam.title,
+         description=exam.description,
+         duration_minutes=exam.duration_minutes,
+-        difficulty=getattr(exam, "difficulty", "medium"),
++        difficulty=exam.difficulty,
+         seb_required=exam.seb_required,
+         max_infractions=exam.max_infractions,
+         is_active=exam.is_active,
+     )
+ 
+ @router.post("/{exam_id}/start", response_model=AttemptResponse)
+diff --git a/backend/api/institutional_api.py b/backend/api/institutional_api.py
+index 75abdd3..a288317 100644
+--- a/backend/api/institutional_api.py
++++ b/backend/api/institutional_api.py
+@@ -494,12 +494,43 @@ async def get_drive_results(org_id: str, drive_id: str, user: dict = require_rol
+         logger.error(f"get_drive_results failed: {e}")
+         raise HTTPException(status_code=500, detail="Failed to fetch drive results")
+ 
+ 
+ # ── Exam Assignment (Formal Coding Tests) ────────────────────────────────
+ 
++class OrgExamCreateRequest(BaseModel):
++    title: str
++    description: str = "Formal Scheduled Coding Examination"
++    duration_minutes: int = 60
++    difficulty: str = "medium"
++    seb_required: bool = True
++    max_infractions: int = 3
++    question_ids: list[str] = []
++
++
++@router.post("/{org_id}/exams/create")
++async def create_exam_for_org(
++    org_id: str,
++    req: OrgExamCreateRequest,
++    user: dict = require_role("admin", "faculty"),
++):
++    """Admin creates a formal exam scoped to an org."""
++    from backend.api.exams import CreateExamRequest, create_exam
++    body = CreateExamRequest(
++        title=req.title,
++        description=req.description,
++        duration_minutes=req.duration_minutes,
++        difficulty=req.difficulty,
++        seb_required=req.seb_required,
++        max_infractions=req.max_infractions,
++        question_ids=req.question_ids,
++    )
++    async with _db() as db:
++        return await create_exam(body, db, user)
++
++
+ @router.get("/{org_id}/exams")
+ async def list_exams(org_id: str, user: dict = require_role("admin", "faculty")):
+     try:
+         from sqlalchemy import text
+         async with _db() as db:
+             r = await db.execute(text("""

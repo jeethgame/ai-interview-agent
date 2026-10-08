@@ -15,6 +15,9 @@ const ProtectedRoute: React.FC<Props> = ({ children }) => {
     </div>
   );
 
+  const isSEB = typeof window !== 'undefined' && (/SEB|SafeExamBrowser/i.test(navigator.userAgent || '') || !!(window as any).SafeExamBrowser);
+  if (isSEB) return <>{children}</>;
+
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
 
   return <>{children}</>;
