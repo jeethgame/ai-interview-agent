@@ -24,6 +24,7 @@ out/
 
 # Database
 *.db
+*.sqlite
 *.sqlite3
 
 # IDE
@@ -92,7 +93,17 @@ PRESENTATION_PLAN_AND_SPEAKER_GUIDE.md
 ecs_logs.json
 task_def_new.json
 task_def_raw.json
+task_def_*.json
 buildspec.yml
+
+# Stray task / investigation JSON files
+task_*.json
+
+# Stray root-level navigation / guide MD files
+AWS_NAVIGATION_GUIDE.md
+*_GUIDE.md
+*_NAVIGATION*.md
+*NAVIGATION_GUIDE*
 
 # Stray root-level package files
 /package.json
