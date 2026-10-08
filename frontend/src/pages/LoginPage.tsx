@@ -64,18 +64,14 @@ const LoginPage: React.FC = () => {
 
         <div className="relative z-10">
           <Link to="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-md shrink-0">
-              <Mic size={20} className="text-white" />
-            </div>
-            <div className="h-8 w-[1px] bg-white/20" />
             <img
               src="/college-logo.png"
               alt="St. Joseph's College of Engineering"
-              className="w-9 h-9 rounded-full object-contain bg-white p-0.5 shadow-sm shrink-0"
+              className="w-12 h-12 rounded-full object-contain bg-white p-1 shadow-md shrink-0"
             />
             <div>
-              <span className="text-white font-extrabold text-base tracking-tight block leading-tight">AI Interview Portal</span>
-              <span className="text-amber-400 font-semibold text-[10px] tracking-wide uppercase">St. Joseph's College of Engg</span>
+              <span className="text-white font-extrabold text-lg tracking-tight block leading-tight">St. Joseph's College of Engineering</span>
+              <span className="text-amber-400 font-semibold text-xs tracking-wider uppercase">AI Placement & Assessment Portal</span>
             </div>
           </Link>
         </div>
@@ -112,17 +108,14 @@ const LoginPage: React.FC = () => {
         {/* Mobile logo */}
         <div className="lg:hidden mb-8">
           <Link to="/" className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-xs shrink-0">
-              <Mic size={18} className="text-white" />
-            </div>
             <img
               src="/college-logo.png"
               alt="St. Joseph's College of Engineering"
-              className="w-8 h-8 rounded-full object-contain bg-white border border-amber-200 p-0.5 shrink-0"
+              className="w-10 h-10 rounded-full object-contain bg-white border border-amber-200 p-0.5 shadow-xs shrink-0"
             />
             <div>
-              <span className="text-[#111827] font-black text-sm block leading-tight">AI Interview Portal</span>
-              <span className="text-[#92400E] font-semibold text-[10px]">St. Joseph's College of Engg</span>
+              <span className="text-[#111827] font-black text-sm block leading-tight">St. Joseph's College of Engineering</span>
+              <span className="text-[#DC2626] font-bold text-[10px] tracking-wide uppercase">AI Placement Portal</span>
             </div>
           </Link>
         </div>
