@@ -356,6 +356,14 @@ export const AdminDashboard: React.FC<Props> = ({ orgId, token }) => {
       {/* ── Tab 1: Overview ────────────────────────────────────────────── */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {summary && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard label="Total Assigned" value={summary.total_assigned} icon={<Target size={18} />} />
+              <StatCard label="Completed" value={summary.total_completed} icon={<TrendingUp size={18} />} />
+              <StatCard label="Completion Rate" value={`${summary.completion_rate ?? 0}%`} icon={<BarChart3 size={18} />} />
+              <StatCard label="Avg Exam Score" value={summary.exams?.avg_exam_score != null ? `${summary.exams.avg_exam_score}/100` : '—'} icon={<Award size={18} />} />
+            </div>
+          )}
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
