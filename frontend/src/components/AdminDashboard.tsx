@@ -712,10 +712,17 @@ const CreateExamModal: React.FC<{
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState(60);
+  const [difficulty, setDifficulty] = useState('medium');
   const [maxInfractions, setMaxInfractions] = useState(3);
   const [sebRequired, setSebRequired] = useState(true);
+  const [questionBank, setQuestionBank] = useState<{ id: string; title: string; difficulty: string; category: string }[]>([]);
+  const [selectedQIds, setSelectedQIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
+
+  useEffect(() => {
+    apiFetch('/questions?limit=50', token).then(setQuestionBank).catch(() => setQuestionBank([]));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -730,9 +737,10 @@ const CreateExamModal: React.FC<{
           title,
           description,
           duration_minutes: duration,
+          difficulty,
           max_infractions: maxInfractions,
           seb_required: sebRequired,
-          question_ids: [],
+          question_ids: selectedQIds,
         }),
       });
       onSuccess();
@@ -745,7 +753,7 @@ const CreateExamModal: React.FC<{
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Code2 size={20} className="text-[#DC2626]" />
@@ -780,9 +788,9 @@ const CreateExamModal: React.FC<{
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Duration (minutes)</label>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Duration (min)</label>
               <input
                 type="number"
                 min={10}
@@ -793,7 +801,19 @@ const CreateExamModal: React.FC<{
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Max Infractions</label>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Difficulty</label>
+              <select
+                value={difficulty}
+                onChange={e => setDifficulty(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Max Strikes</label>
               <input
                 type="number"
                 min={1}
@@ -816,6 +836,37 @@ const CreateExamModal: React.FC<{
             <label htmlFor="seb" className="text-xs text-gray-700 font-medium">
               Enable Safe Exam Browser (SEB) & proctoring guard
             </label>
+          </div>
+
+          {/* Question picker */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              Questions{questionBank.length > 0 ? ` (${selectedQIds.length} selected)` : ''}
+            </label>
+            {questionBank.length === 0 ? (
+              <p className="text-xs text-gray-400 px-3 py-2 border border-dashed border-gray-200 rounded-xl">
+                No questions in bank yet
+              </p>
+            ) : (
+              <div className="border border-gray-200 rounded-xl p-2 max-h-40 overflow-y-auto space-y-1">
+                {questionBank.map(q => (
+                  <label key={q.id} className="flex items-center gap-2 px-2 py-1 hover:bg-gray-50 cursor-pointer rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={selectedQIds.includes(q.id)}
+                      onChange={e => setSelectedQIds(prev => e.target.checked ? [...prev, q.id] : prev.filter(i => i !== q.id))}
+                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                    />
+                    <span className="text-sm flex-1 truncate">{q.title}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${
+                      q.difficulty?.toLowerCase() === 'easy' ? 'bg-green-100 text-green-700' :
+                      q.difficulty?.toLowerCase() === 'hard' ? 'bg-red-100 text-red-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>{q.difficulty}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">

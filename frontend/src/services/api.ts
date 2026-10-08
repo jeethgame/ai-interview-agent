@@ -781,3 +781,32 @@ export async function getScorecardHistory(limit = 20): Promise<ScorecardHistoryI
   });
   return handleResponse(response);
 }
+
+// ── Admin Exam Management ─────────────────────────────────────────────────
+
+export interface CreateExamPayload {
+  title: string;
+  description?: string;
+  duration_minutes: number;
+  difficulty: string;
+  seb_required: boolean;
+  max_infractions: number;
+  question_ids: string[];
+}
+
+export async function createExam(data: CreateExamPayload, token?: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/exams/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+}
+
+export async function getQuestions(token?: string): Promise<any[]> {
+  const response = await fetch(`${API_BASE_URL}/questions?limit=50`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!response.ok) return [];
+  return response.json();
+}
