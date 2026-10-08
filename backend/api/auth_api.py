@@ -34,6 +34,7 @@ async def _resolve_role_from_db(user_id: str) -> str | None:
             return cached_role
     try:
         from sqlalchemy import text
+
         from backend.database import AsyncSessionLocal
         async with AsyncSessionLocal() as db:
             r = await db.execute(

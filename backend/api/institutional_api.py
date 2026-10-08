@@ -497,6 +497,37 @@ async def get_drive_results(org_id: str, drive_id: str, user: dict = require_rol
 
 # ── Exam Assignment (Formal Coding Tests) ────────────────────────────────
 
+class OrgExamCreateRequest(BaseModel):
+    title: str
+    description: str = "Formal Scheduled Coding Examination"
+    duration_minutes: int = 60
+    difficulty: str = "medium"
+    seb_required: bool = True
+    max_infractions: int = 3
+    question_ids: list[str] = []
+
+
+@router.post("/{org_id}/exams/create")
+async def create_exam_for_org(
+    org_id: str,
+    req: OrgExamCreateRequest,
+    user: dict = require_role("admin", "faculty"),
+):
+    """Admin creates a formal exam scoped to an org."""
+    from backend.api.exams import CreateExamRequest, create_exam
+    body = CreateExamRequest(
+        title=req.title,
+        description=req.description,
+        duration_minutes=req.duration_minutes,
+        difficulty=req.difficulty,
+        seb_required=req.seb_required,
+        max_infractions=req.max_infractions,
+        question_ids=req.question_ids,
+    )
+    async with _db() as db:
+        return await create_exam(body, db, user)
+
+
 @router.get("/{org_id}/exams")
 async def list_exams(org_id: str, user: dict = require_role("admin", "faculty")):
     try:

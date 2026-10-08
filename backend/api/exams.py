@@ -97,7 +97,7 @@ async def get_exam(
         title=exam.title,
         description=exam.description,
         duration_minutes=exam.duration_minutes,
-        difficulty=getattr(exam, "difficulty", "medium"),
+        difficulty=exam.difficulty,
         seb_required=exam.seb_required,
         max_infractions=exam.max_infractions,
         is_active=exam.is_active,
