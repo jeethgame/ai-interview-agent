@@ -302,7 +302,7 @@ const CandidateHomePage: React.FC = () => {
             <p className="text-sm text-[#6B7280] mt-1">
               {pendingTests + pendingInterviews > 0
                 ? `You have ${pendingTests + pendingInterviews} pending assignment${pendingTests + pendingInterviews > 1 ? 's' : ''}.`
-                : 'All caught up! Practice anytime with the AI interviewer or coding arena.'}
+                : 'All caught up! Practice anytime with your AI Mock Interview.'}
             </p>
           </div>
         </div>
@@ -344,9 +344,6 @@ const CandidateHomePage: React.FC = () => {
                   {pendingTests} pending
                 </span>
               </div>
-              <Link to="/coding" className="text-xs text-[#6B7280] hover:text-[#DC2626] font-semibold flex items-center gap-0.5 transition-colors">
-                Practice Arena <ArrowRight size={12} />
-              </Link>
             </div>
             <div className="space-y-3">
               {loading ? (

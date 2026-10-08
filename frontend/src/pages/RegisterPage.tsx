@@ -57,11 +57,20 @@ const RegisterPage: React.FC = () => {
           ))}
         </div>
         <div className="relative z-10">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#DC2626] flex items-center justify-center">
-              <Mic size={18} className="text-white" />
+          <Link to="/" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-md shrink-0">
+              <Mic size={20} className="text-white" />
             </div>
-            <span className="text-white font-black text-lg">AI Interview Agent</span>
+            <div className="h-8 w-[1px] bg-white/20" />
+            <img
+              src="/college-logo.png"
+              alt="St. Joseph's College of Engineering"
+              className="w-9 h-9 rounded-full object-contain bg-white p-0.5 shadow-sm shrink-0"
+            />
+            <div>
+              <span className="text-white font-extrabold text-base tracking-tight block leading-tight">AI Interview Portal</span>
+              <span className="text-amber-400 font-semibold text-[10px] tracking-wide uppercase">St. Joseph's College of Engg</span>
+            </div>
           </Link>
         </div>
         <div className="relative z-10 space-y-5">
@@ -78,22 +87,35 @@ const RegisterPage: React.FC = () => {
             ))}
           </ul>
         </div>
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#DC2626]/20 border border-[#DC2626]/30 flex items-center justify-center">
-            <span className="text-[#DC2626] text-xs font-bold">SJ</span>
+        <div className="relative z-10 flex items-center gap-3 pt-4 border-t border-white/10">
+          <img
+            src="/college-logo.png"
+            alt="St. Joseph's College of Engineering"
+            className="w-8 h-8 rounded-full object-contain bg-white p-0.5 shrink-0"
+          />
+          <div>
+            <p className="text-white text-xs font-bold">St. Joseph's College of Engineering</p>
+            <p className="text-gray-400 text-[11px]">Department of Placement & Training</p>
           </div>
-          <p className="text-gray-500 text-sm">St. Joseph's College of Engineering</p>
         </div>
       </div>
 
       {/* Right panel */}
       <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-12">
         <div className="lg:hidden mb-8">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#DC2626] flex items-center justify-center">
-              <Mic size={16} className="text-white" />
+          <Link to="/" className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-xs shrink-0">
+              <Mic size={18} className="text-white" />
             </div>
-            <span className="text-[#111827] font-black text-base">AI Interview Agent</span>
+            <img
+              src="/college-logo.png"
+              alt="St. Joseph's College of Engineering"
+              className="w-8 h-8 rounded-full object-contain bg-white border border-amber-200 p-0.5 shrink-0"
+            />
+            <div>
+              <span className="text-[#111827] font-black text-sm block leading-tight">AI Interview Portal</span>
+              <span className="text-[#92400E] font-semibold text-[10px]">St. Joseph's College of Engg</span>
+            </div>
           </Link>
         </div>
 

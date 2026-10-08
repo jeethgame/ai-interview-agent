@@ -86,8 +86,10 @@ const LandingPage: React.FC = () => {
       <footer className="bg-[#0B0F17] border-t border-gray-800 text-gray-400 py-8 px-4 text-xs">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src="/app-logo.jpg" alt="Logo" className="w-6 h-6 rounded-md object-cover" />
-            <img src="/college-logo.png" alt="St. Joseph's Crest" className="w-6 h-6 rounded-full object-contain bg-white p-0.5" />
+            <div className="w-6 h-6 rounded-md bg-[#DC2626] flex items-center justify-center shrink-0">
+              <Mic size={14} className="text-white" />
+            </div>
+            <img src="/college-logo.png" alt="St. Joseph's Crest" className="w-6 h-6 rounded-full object-contain bg-white p-0.5 shrink-0" />
             <span className="font-semibold text-gray-300">St. Joseph's College of Engineering</span>
           </div>
           <p className="text-gray-500">

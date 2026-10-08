@@ -177,11 +177,8 @@ const ProfilePage: React.FC = () => {
 
             {/* Scorecard */}
             {tab === 'scorecard' && (
-              <Suspense fallback={<div className="bg-white rounded-xl p-8 animate-pulse text-center text-sm text-gray-400">Loading…</div>}>
-                <div className="bg-white rounded-2xl border border-gray-200 p-4">
-                  <h2 className="text-base font-bold text-[#111827] mb-4 px-2">Performance Scorecard</h2>
-                  <ScorecardView />
-                </div>
+              <Suspense fallback={<div className="bg-white rounded-2xl border border-gray-200 p-8 animate-pulse text-center text-sm text-gray-400">Loading scorecard…</div>}>
+                <ScorecardView />
               </Suspense>
             )}
           </div>

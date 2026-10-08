@@ -61,13 +61,8 @@ function App() {
                 </RoleRoute>
               </ProtectedRoute>
             } />
-            <Route path="/coding" element={
-              <ProtectedRoute>
-                <RoleRoute roles={['candidate']} fallback="/dashboard">
-                  <CodingPage />
-                </RoleRoute>
-              </ProtectedRoute>
-            } />
+            {/* Coding Arena is restricted — redirect to candidate home */}
+            <Route path="/coding" element={<Navigate to="/home" replace />} />
             {/* Exam — full page, no header, SEB locked */}
             <Route path="/exam/:examId" element={
               <ProtectedRoute>

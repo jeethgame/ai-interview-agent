@@ -64,16 +64,14 @@ const LoginPage: React.FC = () => {
 
         <div className="relative z-10">
           <Link to="/" className="flex items-center gap-3">
-            <img
-              src="/app-logo.jpg"
-              alt="AI Interview Portal"
-              className="w-10 h-10 rounded-xl object-cover border border-white/20 shadow-md"
-            />
+            <div className="w-10 h-10 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-md shrink-0">
+              <Mic size={20} className="text-white" />
+            </div>
             <div className="h-8 w-[1px] bg-white/20" />
             <img
               src="/college-logo.png"
               alt="St. Joseph's College of Engineering"
-              className="w-9 h-9 rounded-full object-contain bg-white p-0.5 shadow-sm"
+              className="w-9 h-9 rounded-full object-contain bg-white p-0.5 shadow-sm shrink-0"
             />
             <div>
               <span className="text-white font-extrabold text-base tracking-tight block leading-tight">AI Interview Portal</span>
@@ -100,7 +98,7 @@ const LoginPage: React.FC = () => {
           <img
             src="/college-logo.png"
             alt="St. Joseph's College of Engineering"
-            className="w-8 h-8 rounded-full object-contain bg-white p-0.5"
+            className="w-8 h-8 rounded-full object-contain bg-white p-0.5 shrink-0"
           />
           <div>
             <p className="text-white text-xs font-bold">St. Joseph's College of Engineering</p>
@@ -114,15 +112,13 @@ const LoginPage: React.FC = () => {
         {/* Mobile logo */}
         <div className="lg:hidden mb-8">
           <Link to="/" className="flex items-center gap-3">
-            <img
-              src="/app-logo.jpg"
-              alt="AI Interview Portal"
-              className="w-9 h-9 rounded-xl object-cover border border-gray-100 shadow-sm"
-            />
+            <div className="w-9 h-9 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-xs shrink-0">
+              <Mic size={18} className="text-white" />
+            </div>
             <img
               src="/college-logo.png"
               alt="St. Joseph's College of Engineering"
-              className="w-8 h-8 rounded-full object-contain bg-white border border-amber-200 p-0.5"
+              className="w-8 h-8 rounded-full object-contain bg-white border border-amber-200 p-0.5 shrink-0"
             />
             <div>
               <span className="text-[#111827] font-black text-sm block leading-tight">AI Interview Portal</span>

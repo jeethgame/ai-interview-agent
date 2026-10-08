@@ -42,7 +42,6 @@ const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
     ...(isCandidate ? [
       { to: '/home', label: 'Home', icon: <LayoutDashboard size={14} /> },
       { to: '/interview', label: 'AI Mock Interview', icon: <Mic size={14} /> },
-      { to: '/coding', label: 'Coding Arena', icon: <Code2 size={14} /> },
       { to: '/profile?tab=scorecard', label: 'Scorecard', icon: <User size={14} /> },
     ] : []),
     ...((isFaculty || isAdmin) ? [
@@ -72,11 +71,9 @@ const Header: React.FC<HeaderProps> = ({ onReset, showReset = false }) => {
 
         {/* Brand & Logos */}
         <Link to={isAuthenticated ? (isCandidate ? '/home' : '/dashboard') : '/'} className="flex items-center gap-3 group select-none">
-          <img
-            src="/app-logo.jpg"
-            alt="AI Interview Portal"
-            className="w-9 h-9 rounded-xl object-cover border border-gray-100 shadow-sm group-hover:shadow-md transition-shadow"
-          />
+          <div className="w-9 h-9 rounded-xl bg-[#DC2626] flex items-center justify-center shadow-xs group-hover:shadow-md transition-shadow shrink-0">
+            <Mic size={18} className="text-white" />
+          </div>
           <div className="h-7 w-[1px] bg-gray-200 hidden sm:block" />
           <div className="flex items-center gap-2">
             <img
