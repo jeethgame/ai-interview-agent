@@ -91,6 +91,8 @@ class DriveCreate(BaseModel):
     duration_minutes: int = 30
     interview_style: str = "formal"
     difficulty: str = "medium"
+    topic_focus: list[str] = []
+    question_count: int = 5
 
 class DriveResponse(BaseModel):
     id: str
@@ -352,13 +354,18 @@ async def create_drive(org_id: str, body: DriveCreate, user: dict = require_role
                 INSERT INTO placement_drives
                   (id, org_id, title, target_role, company, scheduled_at,
                    duration_minutes, interview_style, difficulty, status,
+                   topic_focus, question_count,
                    created_by, created_at, updated_at)
                 VALUES (:id, :org_id, :title, :role, :company, :sched,
-                        :dur, :style, :diff, 'active', :creator, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        :dur, :style, :diff, 'active',
+                        :topic_focus, :question_count,
+                        :creator, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """), {"id": did, "org_id": org_id, "title": body.title,
                    "role": body.target_role, "company": body.company,
                    "sched": body.scheduled_at, "dur": body.duration_minutes,
                    "style": body.interview_style, "diff": body.difficulty,
+                   "topic_focus": ",".join(body.topic_focus),
+                   "question_count": body.question_count,
                    "creator": user.get("id")})
             await db.commit()
             return DriveResponse(id=did, title=body.title, target_role=body.target_role,

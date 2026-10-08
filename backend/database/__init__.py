@@ -99,6 +99,16 @@ async def init_db() -> None:
         except Exception:
             pass  # Column already exists
 
+        # Add topic_focus / question_count to placement_drives if missing
+        try:
+            await conn.execute(text("ALTER TABLE placement_drives ADD COLUMN topic_focus TEXT DEFAULT ''"))
+        except Exception:
+            pass  # Column already exists
+        try:
+            await conn.execute(text("ALTER TABLE placement_drives ADD COLUMN question_count INTEGER DEFAULT 5"))
+        except Exception:
+            pass  # Column already exists
+
         # Seed correct roles for any existing platform_users whose email signals
         # admin or faculty, but whose role is still 'candidate' (e.g. pre-provisioned
         # accounts or Cognito users registered before custom:role was set).

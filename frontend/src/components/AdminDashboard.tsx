@@ -1142,8 +1142,14 @@ const CreateDriveModal: React.FC<{
   const [style, setStyle] = useState('formal');
   const [difficulty, setDifficulty] = useState('medium');
   const [duration, setDuration] = useState(30);
+  const [topicFocus, setTopicFocus] = useState<string[]>([]);
+  const [questionCount, setQuestionCount] = useState(5);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
+
+  const TOPICS = ['algorithms', 'system-design', 'databases', 'frontend', 'devops', 'behavioral'] as const;
+  const toggleTopic = (t: string) =>
+    setTopicFocus(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1161,6 +1167,8 @@ const CreateDriveModal: React.FC<{
           interview_style: style,
           difficulty,
           duration_minutes: duration,
+          topic_focus: topicFocus,
+          question_count: questionCount,
         }),
       });
       onSuccess();
@@ -1258,6 +1266,30 @@ const CreateDriveModal: React.FC<{
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Topic Focus (optional)</label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {TOPICS.map(topic => (
+                <label key={topic} className={`flex items-center gap-1 text-xs border rounded-lg px-2 py-1 cursor-pointer transition-colors ${topicFocus.includes(topic) ? 'bg-gray-900 text-white border-gray-900' : 'hover:bg-gray-50 border-gray-200'}`}>
+                  <input type="checkbox" checked={topicFocus.includes(topic)} onChange={() => toggleTopic(topic)} className="hidden" />
+                  {topic}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Questions per Interview</label>
+            <input
+              type="number"
+              min={3}
+              max={10}
+              value={questionCount}
+              onChange={e => setQuestionCount(parseInt(e.target.value) || 5)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
