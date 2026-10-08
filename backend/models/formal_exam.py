@@ -17,6 +17,7 @@ class FormalExam(Base):
     seb_required = Column(Boolean, default=True, nullable=False)
     max_infractions = Column(Integer, default=3, nullable=False)
     question_ids = Column(Text, default="[]", nullable=False)  # JSON array of Question UUIDs
+    difficulty = Column(String(50), default="medium", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

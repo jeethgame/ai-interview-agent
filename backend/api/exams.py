@@ -16,6 +16,7 @@ class CreateExamRequest(BaseModel):
     title: str
     description: str = "Formal Scheduled Coding Examination"
     duration_minutes: int = 60
+    difficulty: str = "medium"  # easy | medium | hard
     seb_required: bool = True
     max_infractions: int = 3
     question_ids: list[str] = []
@@ -36,6 +37,7 @@ class ExamResponse(BaseModel):
     title: str
     description: str
     duration_minutes: int
+    difficulty: str = "medium"
     seb_required: bool
     max_infractions: int
     is_active: bool
@@ -60,6 +62,7 @@ async def create_exam(
         title=req.title,
         description=req.description,
         duration_minutes=req.duration_minutes,
+        difficulty=req.difficulty,
         seb_required=req.seb_required,
         max_infractions=req.max_infractions,
         question_ids=json.dumps(req.question_ids),
@@ -72,6 +75,7 @@ async def create_exam(
         title=exam.title,
         description=exam.description,
         duration_minutes=exam.duration_minutes,
+        difficulty=exam.difficulty,
         seb_required=exam.seb_required,
         max_infractions=exam.max_infractions,
         is_active=exam.is_active,
@@ -93,6 +97,7 @@ async def get_exam(
         title=exam.title,
         description=exam.description,
         duration_minutes=exam.duration_minutes,
+        difficulty=getattr(exam, "difficulty", "medium"),
         seb_required=exam.seb_required,
         max_infractions=exam.max_infractions,
         is_active=exam.is_active,

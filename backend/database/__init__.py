@@ -93,5 +93,10 @@ async def init_db() -> None:
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_scorecard_user ON candidate_scorecards(user_id)"
         ))
+        # Add difficulty to formal_exams if missing (Alembic-free migration)
+        try:
+            await conn.execute(text("ALTER TABLE formal_exams ADD COLUMN difficulty VARCHAR(50) DEFAULT 'medium'"))
+        except Exception:
+            pass  # Column already exists
 
 __all__ = ["AsyncSessionLocal", "Base", "DatabaseManager", "get_db", "get_question_bank_db", "init_db"]
