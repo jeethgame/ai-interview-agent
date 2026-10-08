@@ -32,8 +32,9 @@ const LoginPage: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      // redirect handled by useEffect above
+      const loggedInUser = await login(email, password);
+      const dest = from || (loggedInUser.role === 'candidate' ? '/home' : '/dashboard');
+      navigate(dest, { replace: true });
     } catch (err: any) {
       // handleResponse throws Error(message) — not Axios-style err.response.data
       const msg = err?.message || '';

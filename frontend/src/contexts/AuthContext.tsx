@@ -18,8 +18,8 @@ interface AuthContextType {
   isCandidate: boolean;
   isFaculty: boolean;
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string, role?: UserRole) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  register: (email: string, password: string, name: string, role?: UserRole) => Promise<User>;
   logout: () => Promise<void>;
   getToken: () => string | null;
 }
@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loadUser();
   }, []);
 
-  const register = async (email: string, password: string, name: string, role: UserRole = 'candidate') => {
+  const register = async (email: string, password: string, name: string, role: UserRole = 'candidate'): Promise<User> => {
     setIsLoading(true);
     try {
       const { data } = await axios.post<AuthTokens>(`${API_URL}/auth/register`, { email, password, name, role });
@@ -79,20 +79,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem(USER_KEY, JSON.stringify(u));
       setUser(u);
       axios.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
+      return u;
     } catch (e) { throw e; }
     finally { setIsLoading(false); }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     setIsLoading(true);
     try {
       const { data } = await axios.post<AuthTokens>(`${API_URL}/auth/login`, { email, password });
-      const u: User = { ...data.user, role: data.user.role || 'candidate' };
+      const u: User = { ...data.user, role: data.user.role || (email.toLowerCase().includes('admin') ? 'admin' : email.toLowerCase().includes('faculty') ? 'faculty' : 'candidate') };
       localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
       localStorage.setItem(USER_KEY, JSON.stringify(u));
       setUser(u);
       axios.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
+      return u;
     } catch (e) { throw e; }
     finally { setIsLoading(false); }
   };

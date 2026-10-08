@@ -131,7 +131,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-white via-white to-[#FEF3C7]/30">
+    <div className="relative w-full h-screen overflow-hidden bg-[#0A0A0F]">
 
       {/* ── Instructions Modal ── */}
       {phase === 'instructions' && (
@@ -151,11 +151,11 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
 
       {/* ── Top Bar ── */}
       {phase === 'live' && (
-        <div className="fixed top-0 left-0 right-0 flex justify-between items-center px-5 sm:px-8 py-3 z-20 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+        <div className="fixed top-0 left-0 right-0 flex justify-between items-center px-5 sm:px-8 py-3 z-20 bg-black/50 backdrop-blur-lg border-b border-white/8">
           <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border text-[13px] font-bold font-mono transition-colors ${
             isExpired ? 'border-[#DC2626] text-[#DC2626] bg-red-50' :
             isLowTime ? 'border-[#DC2626] text-[#DC2626] bg-red-50 animate-pulse' :
-            'border-[#EAB308] text-[#92400E] bg-[#FEF3C7]/50'
+            'border-amber-500/40 text-amber-400 bg-amber-500/10'
           }`}>
             <Clock size={14} />
             <span>{mm}:{ss}</span>
@@ -223,7 +223,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
       {/* ── Dev Text Input Bar ── */}
       {phase === 'live' && devInputOpen && (
         <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-[25] w-full max-w-xl px-4">
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-gray-200 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#13131A] border border-white/10 shadow-[0_4px_25px_rgba(0,0,0,0.5)]">
             <input
               type="text"
               value={devText}
@@ -232,7 +232,7 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
               placeholder="Type your response here..."
               autoFocus
               disabled={isLoading}
-              className="flex-1 bg-transparent text-sm text-[#111827] placeholder-[#9CA3AF] outline-none"
+              className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
             />
             <button
               onClick={handleDevSend}
@@ -266,14 +266,14 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
 
       {/* ── Secondary Control Dock ── */}
       {phase === 'live' && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-2xl bg-white border border-gray-200 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-2xl bg-[#13131A] border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
           <button
             onClick={() => setTranscriptOpen(!transcriptOpen)}
             title="Toggle transcript"
             className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
               transcriptOpen
-                ? 'bg-[#FEF3C7] text-[#92400E] border border-[#EAB308]'
-                : 'bg-gray-50 text-[#6B7280] hover:bg-gray-100 border border-gray-200'
+                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                : 'bg-white/5 text-white/40 hover:bg-white/10 border border-white/8'
             }`}
           >
             <MessageSquare size={18} />
@@ -284,8 +284,8 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
             title="Toggle text input"
             className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
               devInputOpen
-                ? 'bg-[#DC2626]/10 text-[#DC2626] border border-[#DC2626]/30'
-                : 'bg-gray-50 text-[#6B7280] hover:bg-gray-100 border border-gray-200'
+                ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                : 'bg-white/5 text-white/40 hover:bg-white/10 border border-white/8'
             }`}
           >
             <Keyboard size={18} />
@@ -305,14 +305,14 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({
       {/* ── End Confirm Modal ── */}
       {showEndConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4">
+          <div className="bg-[#13131A] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-[0_8px_40px_rgba(0,0,0,0.6)] space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-50 border border-red-200 flex items-center justify-center">
-                <AlertTriangle size={18} className="text-[#DC2626]" />
+              <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/25 flex items-center justify-center">
+                <AlertTriangle size={18} className="text-red-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-[#111827]">End Interview?</h3>
-                <p className="text-xs text-[#6B7280]">Your session will be evaluated.</p>
+                <h3 className="text-base font-bold text-white">End Interview?</h3>
+                <p className="text-xs text-white/40">Your session will be evaluated.</p>
               </div>
             </div>
             <div className="flex gap-2 justify-end pt-2">
