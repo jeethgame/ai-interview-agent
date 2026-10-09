@@ -38,59 +38,33 @@ type Tab = 'account' | 'resume' | 'history';
 // Helper to convert history item to ScorecardView evaluation data
 function mapHistoryItemToEvaluationData(item: ScorecardHistoryItem): EvaluationData {
   const dims = (item.dimension_scores || {}) as Record<string, any>;
+  const rawScore = Number(item.overall_score ?? 0);
   return {
-    overallScore: Math.round(item.overall_score || 84.5),
-    correctness: Number(dims.correctness ?? dims.technical_depth ?? 8.5),
-    complexity: Number(dims.complexity ?? dims.problem_solving ?? 8.0),
-    systemDesign: Number(dims.systemDesign ?? dims.architecture ?? 9.0),
-    communication: Number(dims.communication ?? 8.0),
-    veracity: Number(dims.veracity ?? dims.truthfulness ?? 9.0),
+    overallScore: Math.round(rawScore),
+    correctness: Number(dims.correctness ?? dims.technical_depth ?? (rawScore > 0 ? Number((rawScore / 10).toFixed(1)) : 0)),
+    complexity: Number(dims.complexity ?? dims.problem_solving ?? 0),
+    systemDesign: Number(dims.systemDesign ?? dims.architecture ?? 0),
+    communication: Number(dims.communication ?? 0),
+    veracity: Number(dims.veracity ?? dims.truthfulness ?? 0),
     summary:
       dims.summary ||
-      'Candidate exhibited sound algorithmic analysis and clean modular separation during technical questions. Responses aligned well with stated resume qualifications.',
+      (rawScore > 0
+        ? `Evaluation completed with an overall assessed score of ${rawScore}/100.`
+        : 'Assessment finalized with 0 score. No test cases or answers met criteria.'),
     strengths:
       Array.isArray(dims.strengths) && dims.strengths.length > 0
         ? dims.strengths
-        : [
-            'Clean modular code structure with robust boundary checks',
-            'Optimal linear time complexity on technical challenges',
-            'Quantified resume claim defense for caching throughput',
-            'Clear communication and methodical problem decomposition',
-          ],
+        : (rawScore > 0 ? ['Completed required examination components.'] : []),
     weaknesses:
       Array.isArray(dims.weaknesses) && dims.weaknesses.length > 0
         ? dims.weaknesses
-        : [
-            'Could optimize auxiliary memory allocations from O(N) to O(1)',
-            'Review distributed consensus edge cases under network partitions',
-          ],
+        : (rawScore === 0 ? ['Did not pass evaluation test cases.'] : []),
     roadmap:
       Array.isArray(dims.roadmap) && dims.roadmap.length > 0
         ? dims.roadmap
-        : [
-            {
-              week: 1,
-              focus: 'Algorithmic Efficiency & Big-O Rigor',
-              tasks: ['Drill medium two-pointer and sliding window questions', 'Profile auxiliary memory via AST'],
-            },
-            {
-              week: 2,
-              focus: 'System Design Trade-offs',
-              tasks: ['Design distributed rate limiter with Redis', 'Compare B-Tree vs LSM-Tree storage engines'],
-            },
-            {
-              week: 3,
-              focus: 'Resume Claim Defense',
-              tasks: ['Audit microservice circuit breakers', 'Run 3 dynamic AI follow-up drills'],
-            },
-            {
-              week: 4,
-              focus: 'Formal Assessment Simulation',
-              tasks: ['Complete 60-min SEB lockdown exam', 'Review longitudinal competency radar'],
-            },
-          ],
+        : [],
     sessionDate: item.date ? new Date(item.date).toLocaleDateString() : undefined,
-    role: item.role || 'Software Development Engineer',
+    role: item.role || 'Technical Assessment',
   };
 }
 

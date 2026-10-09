@@ -72,7 +72,7 @@ async def _score_submission(exam: FormalExam, answers: dict) -> int:
 
         question_ids = json.loads(exam.question_ids or "[]")
         if not question_ids:
-            return 85
+            return 0
         total, passed = 0, 0
         for qid in question_ids:
             answer = answers.get(str(qid)) or answers.get(qid)
@@ -88,14 +88,12 @@ async def _score_submission(exam: FormalExam, answers: dict) -> int:
                 result = _execute_test_case(source_code, language, tc)
                 if result.get("status") == "passed":
                     passed += 1
-        if total > 0:
+        if total > 0 and passed > 0:
             return round((passed / total) * 100)
-        # Baseline score if code was submitted but no test cases were registered
-        has_code = any(bool(a.get("source_code", "").strip()) for a in answers.values() if isinstance(a, dict))
-        return 85 if has_code else 0
+        return 0
     except Exception as e:
-        logger.warning("Scoring failed, defaulting to 85: %s", e)
-        return 85
+        logger.warning("Scoring failed, returning 0: %s", e)
+        return 0
 
 
 @router.post("/create", response_model=ExamResponse)
@@ -620,13 +618,13 @@ async def submit_exam_attempt(
 
             dim_scores = {
                 "correctness": round(min(10.0, float(attempt.score) / 10.0), 1),
-                "complexity": 8.0,
-                "systemDesign": 8.5,
-                "communication": 8.5,
-                "veracity": 9.0,
+                "coding_score": int(attempt.score),
+                "summary": f"Completed coding assessment with an evaluated score of {attempt.score}/100.",
+                "strengths": ["Automated test runner evaluated submissions successfully."] if attempt.score > 0 else [],
+                "weaknesses": ["No test cases passed. Review solution logic, edge cases, and time limits."] if attempt.score == 0 else [],
             }
-            rubric_band = "Ready for Placement" if attempt.score >= 70 else "Needs Improvement"
-            role_title = exam.title if exam and exam.title else "Formal Technical Assessment"
+            rubric_band = "Ready for Placement" if attempt.score >= 70 else ("Developing Competence" if attempt.score >= 40 else "Needs Improvement")
+            role_title = exam.title if exam and exam.title else "Coding Assessment"
 
             await db.execute(text("""
                 INSERT INTO candidate_scorecards (

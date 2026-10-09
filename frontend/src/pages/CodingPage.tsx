@@ -648,13 +648,13 @@ const CodingPage: React.FC = () => {
 
       if (res.ok) {
         const data = await res.json();
-        setFinalScore(data.score != null ? data.score : 85);
+        setFinalScore(data.score != null ? data.score : 0);
       } else {
-        setFinalScore(85);
+        setFinalScore(0);
       }
     } catch (err) {
       console.warn("End assessment submission error:", err);
-      setFinalScore(85);
+      setFinalScore(0);
     } finally {
       setSubmittingAll(false);
       setShowEndAssessmentModal(false);
@@ -747,23 +747,23 @@ const CodingPage: React.FC = () => {
               <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
                 <div className="text-left">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Evaluated Score</span>
-                  <span className="text-2xl font-black text-slate-900">{finalScore}%</span>
+                  <span className="text-2xl font-black text-slate-900">{finalScore} / 100</span>
                 </div>
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  {finalScore >= 70 ? "Ready for Placement" : "Completed"}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  finalScore >= 70
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    : finalScore >= 40
+                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                    : "bg-rose-100 text-rose-800 border border-rose-200"
+                }`}>
+                  {finalScore >= 70 ? "Ready for Placement" : finalScore >= 40 ? "Developing Competence" : "Needs Improvement"}
                 </span>
               </div>
             )}
             <div className="flex flex-col gap-2.5">
               <button
-                onClick={() => navigate('/profile?tab=history')}
-                className="w-full py-3 px-6 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
-              >
-                View Test Report & History
-              </button>
-              <button
                 onClick={quitExam}
-                className="w-full py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-bold cursor-pointer transition-all"
+                className="w-full py-3.5 px-6 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold shadow-md cursor-pointer transition-all"
               >
                 Exit Safe Exam Browser
               </button>
