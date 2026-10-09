@@ -212,8 +212,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Session-ID", "X-Request-ID"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Add session saving middleware for automatic session persistence
@@ -251,9 +252,10 @@ if _TEAM_B_ROUTES_AVAILABLE:
     app.include_router(code_review_router)
     app.include_router(resumes_router)
     app.include_router(questions_router)
+    app.include_router(questions_router, prefix="/questions")  # alias for frontend direct calls
     app.include_router(exams_router)
     app.include_router(evaluations_router)
-    logger.info("Team-B platform routes registered (coding, exams, resume, rubric)")
+    logger.info("Team-B platform routes registered (coding, exams, resume, rubric, questions)")
 
 api_key = os.environ.get("GOOGLE_API_KEY", "MISSING_API_KEY")
 

@@ -6,7 +6,62 @@ import path from "path";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8000,
+    port: 5173,
+    proxy: {
+      "/exams": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/auth": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/interview": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/sessions": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/code": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/execution": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/evaluations": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/resumes": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/files": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/blueprint": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/speech": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/ws": {
+        target: "http://localhost:8000",
+        ws: true,
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [
     react(),

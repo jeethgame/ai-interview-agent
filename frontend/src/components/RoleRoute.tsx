@@ -18,6 +18,9 @@ const RoleRoute: React.FC<Props> = ({ children, roles, fallback = '/' }) => {
     </div>
   );
 
+  const isSEB = typeof window !== 'undefined' && (/SEB|SafeExamBrowser/i.test(navigator.userAgent || '') || !!(window as any).SafeExamBrowser);
+  if (isSEB) return <>{children}</>;
+
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (!user || !roles.includes(user.role)) return <Navigate to={fallback} replace />;
 

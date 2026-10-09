@@ -124,19 +124,36 @@ async def _db():
     async with AsyncSessionLocal() as session:
         try:
             yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         finally:
             await session.close()
 
 
-async def _ensure_default_org(db, org_id: str):
+DEFAULT_DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001"
+
+def _normalize_org_id(org_id: str) -> str:
+    """Normalize any string org_id to a valid UUID so PostgreSQL UUID constraints are respected."""
+    if not org_id or org_id == "demo-org-id":
+        return DEFAULT_DEMO_ORG_ID
+    try:
+        uuid.UUID(org_id)
+        return org_id
+    except ValueError:
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, org_id))
+
+async def _ensure_default_org(db, org_id: str = DEFAULT_DEMO_ORG_ID):
     """Seed demo organization on demand so initial queries never fail."""
     from sqlalchemy import text
+    norm_id = _normalize_org_id(org_id)
     try:
         await db.execute(text("""
             INSERT INTO organizations (id, name, type, domain, city, state, country, is_active, created_at, updated_at)
-            VALUES (:id, 'Hope Institute of Technology', 'college', 'hope.edu', 'Bangalore', 'Karnataka', 'India', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (:id, 'Hope Institute of Technology', 'college', 'hope.edu', 'Bangalore', 'Karnataka', 'India', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (id) DO NOTHING
-        """), {"id": org_id})
+        """), {"id": norm_id})
         await db.commit()
     except Exception as e:
         logger.debug(f"Default org check: {e}")
@@ -204,7 +221,7 @@ async def create_org(
             org_id = str(uuid.uuid4())
             await db.execute(text("""
                 INSERT INTO organizations (id, name, type, domain, city, state, country, is_active, created_at, updated_at)
-                VALUES (:id, :name, :type, :domain, :city, :state, :country, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (:id, :name, :type, :domain, :city, :state, :country, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """), {"id": org_id, "name": body.name, "type": body.type,
                    "domain": body.domain, "city": body.city, "state": body.state, "country": body.country})
             await db.commit()
@@ -218,11 +235,11 @@ async def create_org(
 
 @router.get("/{org_id}", response_model=OrgResponse)
 async def get_org(org_id: str, user: dict = Depends(get_current_user)):
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
-            if org_id == "demo-org-id":
-                await _ensure_default_org(db, org_id)
+            await _ensure_default_org(db, org_id)
             r = await db.execute(text("SELECT * FROM organizations WHERE id = :id"), {"id": org_id})
             row = r.mappings().fetchone()
             if not row:
@@ -242,11 +259,11 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
 @router.get("/{org_id}/stats")
 async def get_org_stats(org_id: str, user: dict = require_role("admin", "faculty")):
     """Aggregate analytics: total candidates, drives, completion rates."""
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
-            if org_id == "demo-org-id":
-                await _ensure_default_org(db, org_id)
+            await _ensure_default_org(db, org_id)
             r = await db.execute(text("""
                 SELECT
                     COUNT(DISTINCT cm.user_id) AS total_candidates,
@@ -274,11 +291,11 @@ async def get_org_stats(org_id: str, user: dict = require_role("admin", "faculty
 
 @router.post("/{org_id}/cohorts", response_model=CohortResponse)
 async def create_cohort(org_id: str, body: CohortCreate, user: dict = require_role("admin", "faculty")):
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
-            if org_id == "demo-org-id":
-                await _ensure_default_org(db, org_id)
+            await _ensure_default_org(db, org_id)
             cid = str(uuid.uuid4())
             await db.execute(text("""
                 INSERT INTO cohorts (id, org_id, name, academic_year, department, created_at)
@@ -295,15 +312,17 @@ async def create_cohort(org_id: str, body: CohortCreate, user: dict = require_ro
 
 @router.get("/{org_id}/cohorts")
 async def list_cohorts(org_id: str, user: dict = require_role("admin", "faculty")):
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
+            await _ensure_default_org(db, org_id)
             r = await db.execute(text("""
                 SELECT c.id, c.name, c.academic_year, c.department,
                        COUNT(cm.user_id) AS member_count
                 FROM cohorts c
                 LEFT JOIN cohort_members cm ON cm.cohort_id = c.id
-                WHERE c.org_id = :org_id AND c.is_active = 1
+                WHERE c.org_id = :org_id AND c.is_active = TRUE
                 GROUP BY c.id ORDER BY c.created_at DESC
             """), {"org_id": org_id})
             return [dict(row) for row in r.mappings().fetchall()]
@@ -344,11 +363,11 @@ async def add_cohort_members(
 
 @router.post("/{org_id}/drives", response_model=DriveResponse)
 async def create_drive(org_id: str, body: DriveCreate, user: dict = require_role("admin", "faculty")):
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
-            if org_id == "demo-org-id":
-                await _ensure_default_org(db, org_id)
+            await _ensure_default_org(db, org_id)
             did = str(uuid.uuid4())
             await db.execute(text("""
                 INSERT INTO placement_drives
@@ -377,9 +396,11 @@ async def create_drive(org_id: str, body: DriveCreate, user: dict = require_role
 
 @router.get("/{org_id}/drives")
 async def list_drives(org_id: str, user: dict = require_role("admin", "faculty")):
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
+            await _ensure_default_org(db, org_id)
             r = await db.execute(text("""
                 SELECT pd.id, pd.title, pd.target_role, pd.company, pd.status,
                        pd.interview_style, pd.difficulty, pd.duration_minutes,
@@ -403,6 +424,7 @@ async def allocate_candidates(
     user: dict = require_role("admin", "faculty"),
 ):
     """Assign an AI interview drive to candidates via IDs, email addresses, or cohorts."""
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
@@ -511,7 +533,7 @@ class OrgExamCreateRequest(BaseModel):
     difficulty: str = "medium"
     seb_required: bool = True
     max_infractions: int = 3
-    question_ids: list[str] = []
+    question_ids: list[str | int] = []
 
 
 @router.post("/{org_id}/exams/create")
@@ -535,7 +557,7 @@ async def create_exam_for_org(
         difficulty=req.difficulty,
         seb_required=req.seb_required,
         max_infractions=req.max_infractions,
-        question_ids=req.question_ids,
+        question_ids=[str(q) for q in req.question_ids],
     )
     async with _db() as db:
         return await create_exam(body, db, user)
@@ -548,14 +570,15 @@ async def list_exams(org_id: str, user: dict = require_role("admin", "faculty"))
         async with _db() as db:
             r = await db.execute(text("""
                 SELECT fe.id, fe.title, fe.description, fe.duration_minutes,
-                       fe.seb_required, fe.max_infractions, fe.is_active, fe.created_at,
+                       fe.difficulty, fe.seb_required, fe.max_infractions, fe.is_active, fe.created_at,
                        COUNT(ea.id) AS assigned_count,
                        COUNT(CASE WHEN ea.status = 'completed' THEN 1 END) AS completed_count,
                        ROUND(AVG(CASE WHEN ea.status = 'completed' THEN eat.score END), 1) AS avg_score
                 FROM formal_exams fe
-                LEFT JOIN exam_assignments ea ON ea.exam_id = fe.id
-                LEFT JOIN exam_attempts eat ON eat.exam_id = fe.id AND eat.candidate_id = ea.user_id
-                GROUP BY fe.id ORDER BY fe.created_at DESC
+                LEFT JOIN exam_assignments ea ON ea.exam_id::text = fe.id::text
+                LEFT JOIN exam_attempts eat ON eat.exam_id::text = fe.id::text AND eat.candidate_id::text = ea.user_id::text
+                GROUP BY fe.id, fe.title, fe.description, fe.duration_minutes, fe.difficulty, fe.seb_required, fe.max_infractions, fe.is_active, fe.created_at
+                ORDER BY fe.created_at DESC
             """))
             return [dict(row) for row in r.mappings().fetchall()]
     except Exception as e:
@@ -577,13 +600,13 @@ async def assign_exam(
             for uid in resolved:
                 try:
                     existing = await db.execute(text("""
-                        SELECT id FROM exam_assignments WHERE exam_id = :eid AND user_id = :uid
-                    """), {"eid": exam_id, "uid": uid})
+                        SELECT id FROM exam_assignments WHERE exam_id::text = :eid AND user_id::text = :uid
+                    """), {"eid": str(exam_id), "uid": str(uid)})
                     if not existing.fetchone():
                         await db.execute(text("""
                             INSERT INTO exam_assignments (id, exam_id, user_id, status, deadline, assigned_at)
                             VALUES (:id, :exam_id, :user_id, 'pending', :deadline, CURRENT_TIMESTAMP)
-                        """), {"id": str(uuid.uuid4()), "exam_id": exam_id, "user_id": uid, "deadline": body.deadline})
+                        """), {"id": str(uuid.uuid4()), "exam_id": str(exam_id), "user_id": str(uid), "deadline": body.deadline})
                         assigned += 1
                 except Exception as ex:
                     logger.warning(f"Error assigning candidate {uid}: {ex}")
@@ -608,11 +631,11 @@ async def get_exam_assignments(
                        ea.status, ea.deadline, ea.assigned_at, ea.completed_at,
                        eat.score, eat.infraction_count, eat.status AS attempt_status, eat.submitted_at
                 FROM exam_assignments ea
-                JOIN platform_users pu ON pu.id = ea.user_id
-                LEFT JOIN exam_attempts eat ON eat.exam_id = ea.exam_id AND eat.candidate_id = pu.id
-                WHERE ea.exam_id = :exam_id
+                JOIN platform_users pu ON pu.id::text = ea.user_id::text
+                LEFT JOIN exam_attempts eat ON eat.exam_id::text = ea.exam_id::text AND eat.candidate_id::text = pu.id::text
+                WHERE ea.exam_id::text = :exam_id
                 ORDER BY ea.assigned_at DESC
-            """), {"exam_id": exam_id})
+            """), {"exam_id": str(exam_id)})
             return [dict(row) for row in r.mappings().fetchall()]
     except Exception as e:
         logger.error(f"get_exam_assignments failed: {type(e).__name__}: {e}")
@@ -659,16 +682,18 @@ async def assign_exam_csv(
 @router.get("/{org_id}/analytics/summary")
 async def analytics_summary(org_id: str, user: dict = require_role("admin", "faculty")):
     """Global KPIs: total tests assigned, attended/completed, completion rate, avg scores."""
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
+            await _ensure_default_org(db, org_id)
             exam_stats = await db.execute(text("""
                 SELECT
                     COUNT(ea.id) AS total_assigned_exams,
                     COUNT(CASE WHEN ea.status = 'completed' THEN 1 END) AS total_completed_exams,
                     ROUND(AVG(CASE WHEN ea.status = 'completed' THEN eat.score END), 1) AS avg_exam_score
                 FROM exam_assignments ea
-                LEFT JOIN exam_attempts eat ON eat.exam_id = ea.exam_id AND eat.candidate_id = ea.user_id
+                LEFT JOIN exam_attempts eat ON eat.exam_id::text = ea.exam_id::text AND eat.candidate_id::text = ea.user_id::text
             """))
             es = dict(exam_stats.mappings().fetchone() or {})
 
@@ -679,7 +704,7 @@ async def analytics_summary(org_id: str, user: dict = require_role("admin", "fac
                     ROUND(AVG(CASE WHEN da.status = 'completed' THEN cs.readiness_score END), 1) AS avg_interview_readiness,
                     ROUND(AVG(CASE WHEN da.status = 'completed' THEN cs.overall_score END), 1) AS avg_interview_score
                 FROM drive_allocations da
-                LEFT JOIN candidate_scorecards cs ON cs.user_id = da.user_id
+                LEFT JOIN candidate_scorecards cs ON cs.user_id::text = da.user_id::text
             """))
             ds = dict(drive_stats.mappings().fetchone() or {})
 
@@ -702,9 +727,11 @@ async def analytics_summary(org_id: str, user: dict = require_role("admin", "fac
 @router.get("/{org_id}/analytics/overview")
 async def analytics_overview(org_id: str, user: dict = require_role("admin", "faculty")):
     """Cohort-level aggregate: avg scores, completion rates."""
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
+            await _ensure_default_org(db, org_id)
             r = await db.execute(text("""
                 SELECT
                     c.name AS cohort_name,
@@ -714,10 +741,10 @@ async def analytics_overview(org_id: str, user: dict = require_role("admin", "fa
                     ROUND(AVG(cs.overall_score), 2) AS avg_overall_score,
                     ROUND(AVG(cs.readiness_score), 1) AS avg_readiness
                 FROM cohorts c
-                JOIN cohort_members cm ON cm.cohort_id = c.id
-                LEFT JOIN drive_allocations da ON da.user_id = cm.user_id
-                LEFT JOIN candidate_scorecards cs ON cs.user_id = cm.user_id
-                WHERE c.org_id = :org_id AND c.is_active = 1
+                JOIN cohort_members cm ON cm.cohort_id::text = c.id::text
+                LEFT JOIN drive_allocations da ON da.user_id::text = cm.user_id::text
+                LEFT JOIN candidate_scorecards cs ON cs.user_id::text = cm.user_id::text
+                WHERE c.org_id::text = :org_id AND c.is_active = TRUE
                 GROUP BY c.id, c.name
                 ORDER BY c.name
             """), {"org_id": org_id})
@@ -734,13 +761,15 @@ async def analytics_candidates(
     user: dict = require_role("admin", "faculty"),
 ):
     """Per-candidate performance summary across both coding exams and interview drives."""
+    org_id = _normalize_org_id(org_id)
     try:
         from sqlalchemy import text
         async with _db() as db:
+            await _ensure_default_org(db, org_id)
             params: dict = {"org_id": org_id}
             cohort_filter = ""
             if cohort_id:
-                cohort_filter = "AND cm.cohort_id = :cohort_id"
+                cohort_filter = "AND cm.cohort_id::text = :cohort_id"
                 params["cohort_id"] = cohort_id
 
             r = await db.execute(text(f"""
@@ -758,12 +787,12 @@ async def analytics_candidates(
                     ROUND(AVG(CASE WHEN ea.status = 'completed' THEN eat.score END), 1) AS avg_exam_score,
                     MAX(da.completed_at) AS last_activity_at
                 FROM platform_users pu
-                LEFT JOIN cohort_members cm ON cm.user_id = pu.id
-                LEFT JOIN cohorts c ON c.id = cm.cohort_id AND c.org_id = :org_id
-                LEFT JOIN drive_allocations da ON da.user_id = pu.id
-                LEFT JOIN candidate_scorecards cs ON cs.user_id = pu.id
-                LEFT JOIN exam_assignments ea ON ea.user_id = pu.id
-                LEFT JOIN exam_attempts eat ON eat.exam_id = ea.exam_id AND eat.candidate_id = pu.id
+                LEFT JOIN cohort_members cm ON cm.user_id::text = pu.id::text
+                LEFT JOIN cohorts c ON c.id::text = cm.cohort_id::text AND c.org_id::text = :org_id
+                LEFT JOIN drive_allocations da ON da.user_id::text = pu.id::text
+                LEFT JOIN candidate_scorecards cs ON cs.user_id::text = pu.id::text
+                LEFT JOIN exam_assignments ea ON ea.user_id::text = pu.id::text
+                LEFT JOIN exam_attempts eat ON eat.exam_id::text = ea.exam_id::text AND eat.candidate_id::text = pu.id::text
                 WHERE pu.role = 'candidate' {cohort_filter}
                 GROUP BY pu.id, pu.name, pu.email
                 ORDER BY avg_readiness DESC NULLS LAST, avg_exam_score DESC NULLS LAST
@@ -811,11 +840,11 @@ async def get_my_assignments(user: dict = Depends(get_current_user)):
                        pd.interview_style, pd.difficulty,
                        cs.overall_score, cs.readiness_score, cs.rubric_band
                 FROM drive_allocations da
-                JOIN placement_drives pd ON pd.id = da.drive_id
-                LEFT JOIN candidate_scorecards cs ON cs.user_id = da.user_id
-                WHERE da.user_id = :uid OR da.user_id IN (SELECT id FROM platform_users WHERE LOWER(email) = :uemail)
+                JOIN placement_drives pd ON pd.id::text = da.drive_id::text
+                LEFT JOIN candidate_scorecards cs ON cs.user_id::text = da.user_id::text
+                WHERE da.user_id::text = :uid OR da.user_id::text IN (SELECT id::text FROM platform_users WHERE LOWER(email) = :uemail)
                 ORDER BY pd.scheduled_at DESC NULLS LAST, da.allocated_at DESC
-            """), {"uid": uid, "uemail": uemail})
+            """), {"uid": str(uid), "uemail": str(uemail)})
             interviews = [dict(r) for r in interviews_q.mappings().fetchall()]
 
             exams_q = await db.execute(text("""
@@ -823,11 +852,11 @@ async def get_my_assignments(user: dict = Depends(get_current_user)):
                        fe.title, fe.description, fe.duration_minutes, fe.max_infractions,
                        eat.score, eat.status AS attempt_status
                 FROM exam_assignments ea
-                LEFT JOIN formal_exams fe ON fe.id = ea.exam_id
-                LEFT JOIN exam_attempts eat ON eat.exam_id = ea.exam_id AND (eat.candidate_id = ea.user_id OR eat.candidate_id = :uid)
-                WHERE ea.user_id = :uid OR ea.user_id IN (SELECT id FROM platform_users WHERE LOWER(email) = :uemail)
+                LEFT JOIN formal_exams fe ON fe.id::text = ea.exam_id::text
+                LEFT JOIN exam_attempts eat ON eat.exam_id::text = ea.exam_id::text AND (eat.candidate_id::text = ea.user_id::text OR eat.candidate_id::text = :uid)
+                WHERE ea.user_id::text = :uid OR ea.user_id::text IN (SELECT id::text FROM platform_users WHERE LOWER(email) = :uemail)
                 ORDER BY ea.deadline DESC NULLS LAST, ea.assigned_at DESC
-            """), {"uid": uid, "uemail": uemail})
+            """), {"uid": str(uid), "uemail": str(uemail)})
             exams = [dict(r) for r in exams_q.mappings().fetchall()]
 
             return {"interviews": interviews, "exams": exams}

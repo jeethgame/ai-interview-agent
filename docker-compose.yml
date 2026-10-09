@@ -10,7 +10,7 @@ services:
         required: false          # won't crash if file missing — environment block below covers defaults
     environment:
       USE_MOCK_AUTH: "true"
-      DATABASE_URL: "sqlite+aiosqlite:///./data/project08.db"
+      # DATABASE_URL loaded from backend/.env via env_file above
       SECRET_KEY: "change-me-in-production"
     volumes:
       - db_data:/app/data

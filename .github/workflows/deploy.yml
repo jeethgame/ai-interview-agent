@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - main
+      - integration/full-merge
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -73,6 +77,7 @@ jobs:
   # ── Job 3: Deploy frontend (independent — runs even if backend deploy fails) ──
   deploy-frontend:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [frontend-checks]
     steps:
       - uses: actions/checkout@v4
@@ -97,6 +102,7 @@ jobs:
   # ── Job 4: Deploy backend (ECS) ────────────────────────────────────────────
   deploy-backend:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [backend-checks, frontend-checks]
     steps:
       - uses: actions/checkout@v4

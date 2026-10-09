@@ -37,8 +37,10 @@ out/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs & Certs
 *.log
+*.crt
+*.crl
 
 # Test
 .pytest_cache/

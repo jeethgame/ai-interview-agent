@@ -1,0 +1,150 @@
+diff --git a/backend/api/institutional_api.py b/backend/api/institutional_api.py
+index a288317..faf37d5 100644
+--- a/backend/api/institutional_api.py
++++ b/backend/api/institutional_api.py
+@@ -88,12 +88,14 @@ class DriveCreate(BaseModel):
+     target_role: str
+     company: str | None = None
+     scheduled_at: datetime | None = None
+     duration_minutes: int = 30
+     interview_style: str = "formal"
+     difficulty: str = "medium"
++    topic_focus: list[str] = []
++    question_count: int = 5
+ 
+ class DriveResponse(BaseModel):
+     id: str
+     title: str
+     target_role: str
+     company: str | None
+@@ -349,19 +351,24 @@ async def create_drive(org_id: str, body: DriveCreate, user: dict = require_role
+                 await _ensure_default_org(db, org_id)
+             did = str(uuid.uuid4())
+             await db.execute(text("""
+                 INSERT INTO placement_drives
+                   (id, org_id, title, target_role, company, scheduled_at,
+                    duration_minutes, interview_style, difficulty, status,
++                   topic_focus, question_count,
+                    created_by, created_at, updated_at)
+                 VALUES (:id, :org_id, :title, :role, :company, :sched,
+-                        :dur, :style, :diff, 'active', :creator, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
++                        :dur, :style, :diff, 'active',
++                        :topic_focus, :question_count,
++                        :creator, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             """), {"id": did, "org_id": org_id, "title": body.title,
+                    "role": body.target_role, "company": body.company,
+                    "sched": body.scheduled_at, "dur": body.duration_minutes,
+                    "style": body.interview_style, "diff": body.difficulty,
++                   "topic_focus": ",".join(body.topic_focus),
++                   "question_count": body.question_count,
+                    "creator": user.get("id")})
+             await db.commit()
+             return DriveResponse(id=did, title=body.title, target_role=body.target_role,
+                                  company=body.company, status="active")
+     except Exception as e:
+         logger.error(f"create_drive failed: {e}")
+diff --git a/backend/database/__init__.py b/backend/database/__init__.py
+index 8671ce9..45d24e0 100644
+--- a/backend/database/__init__.py
++++ b/backend/database/__init__.py
+@@ -96,12 +96,22 @@ async def init_db() -> None:
+         # Add difficulty to formal_exams if missing (Alembic-free migration)
+         try:
+             await conn.execute(text("ALTER TABLE formal_exams ADD COLUMN difficulty VARCHAR(50) DEFAULT 'medium'"))
+         except Exception:
+             pass  # Column already exists
+ 
++        # Add topic_focus / question_count to placement_drives if missing
++        try:
++            await conn.execute(text("ALTER TABLE placement_drives ADD COLUMN topic_focus TEXT DEFAULT ''"))
++        except Exception:
++            pass  # Column already exists
++        try:
++            await conn.execute(text("ALTER TABLE placement_drives ADD COLUMN question_count INTEGER DEFAULT 5"))
++        except Exception:
++            pass  # Column already exists
++
+         # Seed correct roles for any existing platform_users whose email signals
+         # admin or faculty, but whose role is still 'candidate' (e.g. pre-provisioned
+         # accounts or Cognito users registered before custom:role was set).
+         try:
+             await conn.execute(text("""
+                 UPDATE platform_users
+diff --git a/frontend/src/components/AdminDashboard.tsx b/frontend/src/components/AdminDashboard.tsx
+index adae473..746cefa 100644
+--- a/frontend/src/components/AdminDashboard.tsx
++++ b/frontend/src/components/AdminDashboard.tsx
+@@ -1139,15 +1139,21 @@ const CreateDriveModal: React.FC<{
+   const [title, setTitle] = useState('');
+   const [role, setRole] = useState('Full Stack Software Engineer');
+   const [company, setCompany] = useState('');
+   const [style, setStyle] = useState('formal');
+   const [difficulty, setDifficulty] = useState('medium');
+   const [duration, setDuration] = useState(30);
++  const [topicFocus, setTopicFocus] = useState<string[]>([]);
++  const [questionCount, setQuestionCount] = useState(5);
+   const [submitting, setSubmitting] = useState(false);
+   const [err, setErr] = useState('');
+ 
++  const TOPICS = ['algorithms', 'system-design', 'databases', 'frontend', 'devops', 'behavioral'] as const;
++  const toggleTopic = (t: string) =>
++    setTopicFocus(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
++
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!title.trim()) return setErr('Drive title is required');
+     setSubmitting(true);
+     setErr('');
+     try {
+@@ -1158,12 +1164,14 @@ const CreateDriveModal: React.FC<{
+           title,
+           target_role: role,
+           company: company.trim() || null,
+           interview_style: style,
+           difficulty,
+           duration_minutes: duration,
++          topic_focus: topicFocus,
++          question_count: questionCount,
+         }),
+       });
+       onSuccess();
+     } catch (e: any) {
+       setErr(e.message || 'Failed to create drive');
+     } finally {
+@@ -1257,12 +1265,36 @@ const CreateDriveModal: React.FC<{
+                 onChange={e => setDuration(parseInt(e.target.value) || 30)}
+                 className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
+               />
+             </div>
+           </div>
+ 
++          <div>
++            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Topic Focus (optional)</label>
++            <div className="flex flex-wrap gap-2 mt-1">
++              {TOPICS.map(topic => (
++                <label key={topic} className={`flex items-center gap-1 text-xs border rounded-lg px-2 py-1 cursor-pointer transition-colors ${topicFocus.includes(topic) ? 'bg-gray-900 text-white border-gray-900' : 'hover:bg-gray-50 border-gray-200'}`}>
++                  <input type="checkbox" checked={topicFocus.includes(topic)} onChange={() => toggleTopic(topic)} className="hidden" />
++                  {topic}
++                </label>
++              ))}
++            </div>
++          </div>
++
++          <div>
++            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Questions per Interview</label>
++            <input
++              type="number"
++              min={3}
++              max={10}
++              value={questionCount}
++              onChange={e => setQuestionCount(parseInt(e.target.value) || 5)}
++              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
++            />
++          </div>
++
+           <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+             <Button type="submit" disabled={submitting} className="rounded-xl bg-[#111827] hover:bg-[#1f2937] text-white">
+               {submitting ? 'Creating…' : 'Create Drive'}
+             </Button>
+           </div>

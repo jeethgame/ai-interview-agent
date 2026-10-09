@@ -14,10 +14,12 @@ const LandingPage         = lazy(() => import('./pages/LandingPage'));
 const CandidateHomePage   = lazy(() => import('./pages/CandidateHomePage'));
 const InterviewPage       = lazy(() => import('./pages/Index'));
 const CodingPage          = lazy(() => import('./pages/CodingPage'));
-const ExamPage            = lazy(() => import('./pages/ExamPage'));
+const SebQuitPage         = lazy(() => import('./pages/SebQuitPage'));
 const ProfilePage         = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage        = lazy(() => import('./pages/SettingsPage'));
 const DashboardPage       = lazy(() => import('./pages/DashboardPage'));
+const CreateExamPage      = lazy(() => import('./pages/CreateExamPage'));
+const CreateDrivePage     = lazy(() => import('./pages/CreateDrivePage'));
 const NotFound            = lazy(() => import('./pages/NotFound'));
 
 const PageLoader = () => (
@@ -26,13 +28,25 @@ const PageLoader = () => (
   </div>
 );
 
-/** Root redirect: candidates → /interview, staff → /dashboard, guests → / */
+/** Root redirect: candidates → /home, staff → /dashboard, SEB → /coding, guests → / */
 const RootRedirect: React.FC = () => {
   const { isAuthenticated, user, isLoading } = useAuth();
   if (isLoading) return <PageLoader />;
+  const isSEB = typeof window !== 'undefined' && (/SEB|SafeExamBrowser/i.test(navigator.userAgent || '') || !!(window as any).SafeExamBrowser);
+  if (isSEB) return <Navigate to="/coding" replace />;
   if (!isAuthenticated) return <LandingPage />;
   if (user?.role === 'candidate') return <Navigate to="/home" replace />;
   return <Navigate to="/dashboard" replace />;
+};
+
+/** Direct download redirect for SEB configuration URLs if hit via React Router */
+const SebConfigRedirect: React.FC = () => {
+  React.useEffect(() => {
+    const search = window.location.search;
+    const path = window.location.pathname;
+    window.location.href = `${path}${search}`;
+  }, []);
+  return <PageLoader />;
 };
 
 function App() {
@@ -45,6 +59,7 @@ function App() {
             <Route path="/"          element={<RootRedirect />} />
             <Route path="/login"     element={<LoginPage />} />
             <Route path="/register"  element={<RegisterPage />} />
+            <Route path="/seb-quit"  element={<SebQuitPage />} />
 
             {/* Candidate-only */}
             <Route path="/home" element={
@@ -61,13 +76,28 @@ function App() {
                 </RoleRoute>
               </ProtectedRoute>
             } />
-            {/* Coding Arena is restricted — redirect to candidate home */}
-            <Route path="/coding" element={<Navigate to="/home" replace />} />
-            {/* Exam — full page, no header, SEB locked */}
+            {/* Coding Arena */}
+            <Route path="/coding" element={
+              <ProtectedRoute>
+                <RoleRoute roles={['candidate', 'faculty', 'admin']} fallback="/coding">
+                  <CodingPage />
+                </RoleRoute>
+              </ProtectedRoute>
+            } />
+            {/* Exam — unified Coding Arena */}
+            <Route path="/exams/:examId/seb-config" element={<SebConfigRedirect />} />
+            <Route path="/exams/seb-config" element={<SebConfigRedirect />} />
             <Route path="/exam/:examId" element={
               <ProtectedRoute>
-                <RoleRoute roles={['candidate']} fallback="/home">
-                  <ExamPage />
+                <RoleRoute roles={['candidate', 'faculty', 'admin']} fallback="/coding">
+                  <CodingPage />
+                </RoleRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/exams/:examId" element={
+              <ProtectedRoute>
+                <RoleRoute roles={['candidate', 'faculty', 'admin']} fallback="/coding">
+                  <CodingPage />
                 </RoleRoute>
               </ProtectedRoute>
             } />
@@ -84,6 +114,22 @@ function App() {
                 </RoleRoute>
               </ProtectedRoute>
             } />
+            <Route path="/exams/create" element={
+              <ProtectedRoute>
+                <RoleRoute roles={['faculty', 'admin']} fallback="/dashboard">
+                  <CreateExamPage />
+                </RoleRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/exams/create" element={<Navigate to="/exams/create" replace />} />
+            <Route path="/drives/create" element={
+              <ProtectedRoute>
+                <RoleRoute roles={['faculty', 'admin']} fallback="/dashboard">
+                  <CreateDrivePage />
+                </RoleRoute>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/drives/create" element={<Navigate to="/drives/create" replace />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

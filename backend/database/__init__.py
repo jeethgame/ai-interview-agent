@@ -47,11 +47,15 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         finally:
             await session.close()
 
-async def get_question_bank_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_question_bank_db() -> AsyncGenerator[AsyncSession | None, None]:
     if _QuestionBankSessionLocal is None:
-        raise RuntimeError("QUESTION_BANK_DATABASE_URL not configured")
-    async with _QuestionBankSessionLocal() as session:
-        yield session
+        yield None
+        return
+    try:
+        async with _QuestionBankSessionLocal() as session:
+            yield session
+    except Exception:
+        yield None
 
 async def init_db() -> None:
     async with _engine.begin() as conn:
