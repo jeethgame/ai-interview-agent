@@ -193,11 +193,11 @@ const SubmittedScreen: React.FC<{ onLeave: () => void }> = ({ onLeave }) => (
       </div>
       <h2 className="text-xl font-black text-slate-900">Exam Submitted!</h2>
       <p className="text-sm text-slate-600 leading-relaxed">
-        Your answers have been submitted successfully. Results will be available after evaluation.
+        Your answers have been submitted successfully. Please exit Safe Exam Browser.
       </p>
       <button onClick={onLeave}
-        className="mt-4 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-all shadow-sm">
-        Return to Dashboard
+        className="mt-4 w-full py-3 px-6 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold transition-all shadow-sm cursor-pointer">
+        Exit Safe Exam Browser
       </button>
     </div>
   </div>
@@ -452,7 +452,7 @@ const ExamPage: React.FC = () => {
     fetchExam();
   }, [examId]);
 
-  const { isSEB, launchSebUrl, downloadConfigUrl, infractionCount, requestFullscreen } = useSEBGuard({
+  const { isSEB, launchSebUrl, downloadConfigUrl, infractionCount, requestFullscreen, quitExam } = useSEBGuard({
     examId,
     candidateId: user?.id || "candidate",
     maxInfractions: examData.max_infractions,
@@ -492,6 +492,7 @@ const ExamPage: React.FC = () => {
         title={examData.title || "Formal Coding Examination"}
         launchUrl={launchSebUrl}
         downloadUrl={downloadConfigUrl}
+        examId={examId}
       />
     );
   }
@@ -499,7 +500,7 @@ const ExamPage: React.FC = () => {
   if (phase === 'instructions') return <InstructionsScreen exam={examData} onNext={() => setPhase('preflight')} onBack={() => navigate('/home')} />;
   if (phase === 'preflight') return <PreflightScreen onStart={handleStart} onBack={() => setPhase('instructions')} />;
   if (phase === 'disqualified') return <DisqualifiedScreen onLeave={() => navigate('/home')} />;
-  if (phase === 'submitted') return <SubmittedScreen onLeave={() => navigate('/home')} />;
+  if (phase === 'submitted') return <SubmittedScreen onLeave={quitExam} />;
 
   return (
     <LiveExam

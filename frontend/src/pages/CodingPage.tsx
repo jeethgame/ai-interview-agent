@@ -740,26 +740,9 @@ const CodingPage: React.FC = () => {
               <CheckCircle2 className="w-9 h-9" />
             </div>
             <h2 className="text-2xl font-black text-slate-900 mb-2">Assessment Submitted</h2>
-            <p className="text-sm text-slate-600 mb-5 leading-relaxed">
-              Your test solutions have been evaluated and recorded to the institutional score registry.
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Your assessment answers and code solutions have been recorded and finalized. Please exit Safe Exam Browser now.
             </p>
-            {finalScore !== null && (
-              <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
-                <div className="text-left">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Evaluated Score</span>
-                  <span className="text-2xl font-black text-slate-900">{finalScore} / 100</span>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  finalScore >= 70
-                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                    : finalScore >= 40
-                    ? "bg-amber-100 text-amber-800 border border-amber-200"
-                    : "bg-rose-100 text-rose-800 border border-rose-200"
-                }`}>
-                  {finalScore >= 70 ? "Ready for Placement" : finalScore >= 40 ? "Developing Competence" : "Needs Improvement"}
-                </span>
-              </div>
-            )}
             <div className="flex flex-col gap-2.5">
               <button
                 onClick={quitExam}

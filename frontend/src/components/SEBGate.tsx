@@ -1,5 +1,6 @@
-import React from "react";
-import { ShieldAlert, ExternalLink, Lock, CheckCircle2, MonitorCheck, AlertCircle, Download } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { ShieldAlert, ExternalLink, Lock, CheckCircle2, MonitorCheck, AlertCircle, Download, FileText, ArrowRight } from "lucide-react";
 
 interface SEBGateProps {
   title?: string;
@@ -23,10 +24,74 @@ export const SEBGate: React.FC<SEBGateProps> = ({
   examId = "",
   onBypass,
 }) => {
+  const navigate = useNavigate();
   const sebDownloadLink = "https://safeexambrowser.org/download_en.html";
 
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [completedScore, setCompletedScore] = useState<number | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+
+  // Check if candidate has already completed this assessment
+  useEffect(() => {
+    let isMounted = true;
+    const checkCompletion = async () => {
+      try {
+        const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+        // 1. Check candidate assignments
+        const assignRes = await fetch(`${API_BASE}/me/assignments`, { headers });
+        if (assignRes.ok) {
+          const data = await assignRes.json();
+          const target = (data.exams || []).find((e: any) =>
+            e.exam_id === examId || e.id === examId || (examId === "coding-assessment" && e.status === "completed")
+          );
+          if (target && (target.status === "completed" || target.attempt_status === "SUBMITTED" || target.attempt_status === "completed")) {
+            if (isMounted) {
+              setIsCompleted(true);
+              if (target.score !== undefined && target.score !== null) {
+                setCompletedScore(Number(target.score));
+              }
+              setCheckingStatus(false);
+              return;
+            }
+          }
+        }
+
+        // 2. Fallback check: recent scorecard history
+        const histRes = await fetch(`${API_BASE}/interview/scorecard/history?limit=10`, { headers });
+        if (histRes.ok) {
+          const histData = await histRes.json();
+          if (Array.isArray(histData) && histData.length > 0) {
+            const match = histData.find((h: any) =>
+              (examId && (h.role?.includes(examId) || h.session_id?.includes(examId))) ||
+              (examId === "coding-assessment" && (h.role?.toLowerCase().includes("coding") || h.role?.toLowerCase().includes("assessment")))
+            );
+            if (match) {
+              if (isMounted) {
+                setIsCompleted(true);
+                setCompletedScore(Number(match.overall_score ?? 0));
+                setCheckingStatus(false);
+                return;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not check exam completion status:", err);
+      } finally {
+        if (isMounted) setCheckingStatus(false);
+      }
+    };
+
+    checkCompletion();
+    return () => {
+      isMounted = false;
+    };
+  }, [examId]);
+
   // Prefetch questions immediately while candidate is viewing the SEB launch gate
-  React.useEffect(() => {
+  useEffect(() => {
     const prefetchQuestions = async () => {
       try {
         const url = examId && examId !== "coding-assessment"
@@ -67,6 +132,77 @@ export const SEBGate: React.FC<SEBGateProps> = ({
       window.location.href = launchUrl;
     }
   };
+
+  if (isCompleted) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col items-center justify-center p-4 selection:bg-rose-500 selection:text-white">
+        <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-xl p-8 md:p-10 flex flex-col text-center items-center">
+          {/* Header Icon */}
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-sm mb-4">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+
+          {/* Badge */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 mb-3">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Assessment Completed
+          </div>
+
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
+            {title}
+          </h1>
+
+          <p className="text-slate-600 text-sm leading-relaxed max-w-md mb-6">
+            You have already taken and submitted this assessment. Your answers and code submissions have been recorded.
+          </p>
+
+          {/* Score display */}
+          <div className="w-full mb-6 p-5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+            <div className="text-left">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                Evaluated Score
+              </span>
+              <span className="text-3xl font-black text-slate-900">
+                {completedScore !== null ? completedScore : 0} <span className="text-lg font-bold text-slate-400">/ 100</span>
+              </span>
+            </div>
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                (completedScore ?? 0) >= 70
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : (completedScore ?? 0) >= 40
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-rose-50 text-rose-700 border-rose-200"
+              }`}
+            >
+              {(completedScore ?? 0) >= 70
+                ? "Ready for Placement"
+                : (completedScore ?? 0) >= 40
+                ? "Developing Competence"
+                : "Needs Improvement"}
+            </span>
+          </div>
+
+          {/* Direct Navigation to History & Reports */}
+          <button
+            onClick={() => navigate("/profile?tab=history")}
+            className="w-full py-4 px-6 rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-black text-base shadow-lg shadow-rose-600/25 flex items-center justify-center gap-3 transition-all cursor-pointer mb-3"
+          >
+            <FileText className="w-5 h-5" />
+            <span>View Test History & Scorecard</span>
+            <ArrowRight className="w-4 h-4 ml-auto" />
+          </button>
+
+          <button
+            onClick={() => navigate("/home")}
+            className="w-full py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-sm transition-all cursor-pointer"
+          >
+            Return to Candidate Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col items-center justify-center p-4 selection:bg-rose-500 selection:text-white">

@@ -181,19 +181,29 @@ const CandidateHomePage: React.FC = () => {
                     </div>
 
                     {/* Action Button */}
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex items-center justify-between gap-2">
                       {isDone ? (
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg">
-                          Completed
-                        </span>
+                        <>
+                          <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-lg">
+                            Completed {test.score !== undefined && test.score !== null ? `(${test.score}/100)` : ''}
+                          </span>
+                          <button
+                            onClick={() => navigate('/profile?tab=history')}
+                            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                          >
+                            <span>View Report</span>
+                          </button>
+                        </>
                       ) : (
-                        <button
-                          onClick={() => navigate(`/coding?exam_id=${test.exam_id || test.id}`)}
-                          className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all shadow-xs hover:shadow-sm cursor-pointer"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>Attempt</span>
-                        </button>
+                        <div className="w-full flex justify-end">
+                          <button
+                            onClick={() => navigate(`/coding?exam_id=${test.exam_id || test.id}`)}
+                            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all shadow-xs hover:shadow-sm cursor-pointer"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            <span>Attempt</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
